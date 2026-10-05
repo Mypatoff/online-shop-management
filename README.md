@@ -1,5 +1,8 @@
 # shop
 
+Free online shop management app that works on localhost with a `.exe`
+or `.sh` file — no install, no internet connection required.
+
 ## Prerequisites
 
 - Go 1.22 or later
