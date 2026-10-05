@@ -1,0 +1,148 @@
+package db
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"time"
+)
+
+// dailyBackupPattern matches both the rotating daily backup, e.g.
+// "shop-2026-10-05.db", and the start-of-day snapshot, e.g.
+// "shop-2026-10-05-start.db", capturing the date either way. Anything
+// else (including shop-premigration-* files) is left alone by Rotate.
+var dailyBackupPattern = regexp.MustCompile(`^shop-(\d{4}-\d{2}-\d{2})(?:-start)?\.db$`)
+
+// DailyBackupName returns the daily backup file name for t's local date.
+func DailyBackupName(t time.Time) string {
+	return fmt.Sprintf("shop-%s.db", t.Format("2006-01-02"))
+}
+
+// StartBackupName returns the start-of-day snapshot file name for t's
+// local date. Unlike the daily backup, this file is written once -
+// the first time it's missing - and never overwritten afterward, so
+// it stays a clean "beginning of today" point to restore to even
+// after hours of further sales.
+func StartBackupName(t time.Time) string {
+	return fmt.Sprintf("shop-%s-start.db", t.Format("2006-01-02"))
+}
+
+// missingFile reports whether name is absent from dir.
+func missingFile(dir, name string) (bool, error) {
+	_, err := os.Stat(filepath.Join(dir, name))
+	if err == nil {
+		return false, nil
+	}
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+	return false, err
+}
+
+// NeedsStartupBackup reports whether today's daily backup file is
+// missing from dir, in which case a startup backup should be taken.
+func NeedsStartupBackup(dir string, now time.Time) (bool, error) {
+	return missingFile(dir, DailyBackupName(now))
+}
+
+// NeedsStartBackup reports whether today's start-of-day snapshot is
+// missing from dir. It's only ever true once per day: the snapshot is
+// never overwritten once it exists.
+func NeedsStartBackup(dir string, now time.Time) (bool, error) {
+	return missingFile(dir, StartBackupName(now))
+}
+
+// WithBackupLock serializes writes to the backup directory using a
+// per-directory lock file, preventing two app instances from racing on
+// the same daily backup path.
+func WithBackupLock(dir string, fn func() error) error {
+	lockPath := filepath.Join(dir, ".shop-backup.lock")
+	for i := 0; i < 200; i++ {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+		if err == nil {
+			defer f.Close()
+			defer os.Remove(lockPath)
+			return fn()
+		}
+		if !os.IsExist(err) {
+			return fmt.Errorf("backup lock: %w", err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("backup lock: timed out waiting for exclusive access")
+}
+
+// Backup writes a consistent snapshot of db to destPath. It runs
+// PRAGMA quick_check first and aborts without touching destPath if the
+// database isn't healthy. Otherwise it uses VACUUM INTO to write the
+// snapshot to a temp file in destPath's directory, then renames it into
+// place, so destPath is never left as a half-written file.
+func Backup(db *sql.DB, destPath string) error {
+	var result string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
+		return fmt.Errorf("backup: quick_check: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("backup: database failed quick_check: %s", result)
+	}
+
+	dir := filepath.Dir(destPath)
+	tmp, err := os.CreateTemp(dir, "shop-backup-*.db.tmp")
+	if err != nil {
+		return fmt.Errorf("backup: create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	if err := os.Remove(tmpPath); err != nil {
+		return fmt.Errorf("backup: remove placeholder: %w", err)
+	}
+	defer os.Remove(tmpPath) //nolint:errcheck // best effort cleanup once renamed away
+
+	if _, err := db.Exec(`VACUUM INTO ?`, tmpPath); err != nil {
+		return fmt.Errorf("backup: vacuum into: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("backup: rename into place: %w", err)
+	}
+	return nil
+}
+
+// Rotate deletes daily backup files in dir (named shop-YYYY-MM-DD.db
+// or shop-YYYY-MM-DD-start.db) whose date is older than keepDays
+// before today. Files that don't match either pattern - including
+// shop-premigration-* files - are left untouched.
+func Rotate(dir string, keepDays int) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("rotate: read dir: %w", err)
+	}
+
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	cutoff := today.AddDate(0, 0, -keepDays)
+
+	var errs []error
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		m := dailyBackupPattern.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		date, err := time.ParseInLocation("2006-01-02", m[1], time.Local)
+		if err != nil {
+			continue
+		}
+		if date.Before(cutoff) {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
