@@ -25,7 +25,13 @@
 			<div class="stat-label">Sales</div>
 			<div class="stat-value" id="day-count">—</div>
 		</div>
+		<div class="stat-card">
+			<div class="stat-label">Billiard revenue</div>
+			<div class="stat-value" id="day-billiard-revenue">—</div>
+		</div>
 	</section>
+
+	<p class="total-revenue-line" id="day-total-revenue-line"></p>
 
 	<h2>By product</h2>
 	<p id="by-product-empty" class="empty hidden">No sales on this day.</p>
@@ -58,6 +64,24 @@
 				</tr>
 			</thead>
 			<tbody id="sales-tbody"></tbody>
+		</table>
+	</div>
+
+	<h2>Billiard</h2>
+	<p id="billiard-day-empty" class="empty hidden">No billiard entries on this day.</p>
+	<div class="table-scroll" id="billiard-day-wrap">
+		<table class="data-table" id="billiard-day-table">
+			<thead>
+				<tr>
+					<th>Time</th>
+					<th>Table</th>
+					<th>Minutes</th>
+					<th>Note</th>
+					<th>Amount</th>
+					<th>Status</th>
+				</tr>
+			</thead>
+			<tbody id="billiard-day-tbody"></tbody>
 		</table>
 	</div>
 </div>

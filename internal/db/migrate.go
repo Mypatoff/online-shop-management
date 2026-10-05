@@ -11,7 +11,7 @@ import (
 // already had its tables (products/sales) before versioning existed is
 // treated as version 1; a brand-new database starts at version 0 and is
 // created directly at currentVersion.
-const currentVersion = 2
+const currentVersion = 3
 
 const stockMovementsSchema = `
 CREATE TABLE IF NOT EXISTS stock_movements (
@@ -27,6 +27,20 @@ CREATE TABLE IF NOT EXISTS stock_movements (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stock_movements_product_created ON stock_movements(product_id, created_at);
+`
+
+const billiardEntriesSchema = `
+CREATE TABLE IF NOT EXISTS billiard_entries (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	amount     INTEGER NOT NULL CHECK (amount > 0),
+	table_name TEXT,
+	minutes    INTEGER,
+	note       TEXT,
+	created_at INTEGER NOT NULL,
+	voided_at  INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_billiard_entries_created ON billiard_entries(created_at);
 `
 
 // execer is satisfied by both *sql.DB and *sql.Tx.
@@ -62,27 +76,45 @@ func migrate(conn *sql.DB, backupDir string, hadTablesBefore bool) error {
 			if _, err := conn.Exec(stockMovementsSchema); err != nil {
 				return fmt.Errorf("create stock_movements: %w", err)
 			}
+			if _, err := conn.Exec(billiardEntriesSchema); err != nil {
+				return fmt.Errorf("create billiard_entries: %w", err)
+			}
 			return setUserVersion(conn, currentVersion)
 		}
 		version = 1
 	}
 
-	if version == 1 {
-		return migrateV1ToV2(conn, backupDir)
-	}
-
-	return fmt.Errorf("database user_version %d is newer than this program supports", version)
-}
-
-// migrateV1ToV2 adds stock_movements and backfills one 'initial' row per
-// existing product. It takes a premigration safety backup first and
-// aborts without touching the schema if that backup fails.
-func migrateV1ToV2(conn *sql.DB, backupDir string) error {
+	// From here on this is a real, pre-existing database with data
+	// worth protecting: one safety backup up front covers every step
+	// below, however many versions behind it starts.
 	premigrationPath := filepath.Join(backupDir, fmt.Sprintf("shop-premigration-%s.db", time.Now().Format("20060102-150405")))
 	if err := Backup(conn, premigrationPath); err != nil {
 		return fmt.Errorf("premigration backup failed, aborting startup: %w", err)
 	}
 
+	if version == 1 {
+		if err := migrateV1ToV2(conn); err != nil {
+			return err
+		}
+		version = 2
+	}
+
+	if version == 2 {
+		if err := migrateV2ToV3(conn); err != nil {
+			return err
+		}
+		version = 3
+	}
+
+	if version != currentVersion {
+		return fmt.Errorf("database user_version %d is newer than this program supports", version)
+	}
+	return nil
+}
+
+// migrateV1ToV2 adds stock_movements and backfills one 'initial' row per
+// existing product.
+func migrateV1ToV2(conn *sql.DB) error {
 	tx, err := conn.Begin()
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
@@ -125,10 +157,31 @@ func migrateV1ToV2(conn *sql.DB, backupDir string) error {
 		}
 	}
 
-	if err := setUserVersion(tx, currentVersion); err != nil {
+	if err := setUserVersion(tx, 2); err != nil {
 		return fmt.Errorf("set user_version: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+// migrateV2ToV3 adds billiard_entries: money received for table time,
+// tracked separately from product stock and sales.
+func migrateV2ToV3(conn *sql.DB) error {
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op if committed
+
+	if _, err := tx.Exec(billiardEntriesSchema); err != nil {
+		return fmt.Errorf("create billiard_entries: %w", err)
+	}
+	if err := setUserVersion(tx, 3); err != nil {
+		return fmt.Errorf("set user_version: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}

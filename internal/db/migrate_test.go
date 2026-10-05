@@ -168,6 +168,135 @@ func TestMigrateTwiceAddsNothing(t *testing.T) {
 	}
 }
 
+// makeV2SchemaDB creates a database file already at user_version 2
+// (products, sales and stock_movements present, no billiard_entries
+// yet), simulating a real database from just before this migration
+// existed.
+func makeV2SchemaDB(t *testing.T, path string) {
+	t.Helper()
+	conn, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open v2-schema db: %v", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.Exec(oldSchemaProductsAndSales); err != nil {
+		t.Fatalf("create base schema: %v", err)
+	}
+	if _, err := conn.Exec(stockMovementsSchema); err != nil {
+		t.Fatalf("create stock_movements: %v", err)
+	}
+	if _, err := conn.Exec(
+		`INSERT INTO products (name, sku, price, stock, low_stock_threshold, archived, created_at, updated_at)
+		 VALUES ('Cola', NULL, 150, 10, 5, 0, 1000, 1000)`,
+	); err != nil {
+		t.Fatalf("seed product: %v", err)
+	}
+	if _, err := conn.Exec(`PRAGMA user_version = 2`); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+}
+
+func TestMigrateV2ToV3CreatesBilliardTableAndKeepsData(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shop.db")
+	backupDir := filepath.Join(dir, "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatalf("mkdir backups: %v", err)
+	}
+
+	makeV2SchemaDB(t, dbPath)
+
+	conn, err := Open(dbPath, backupDir)
+	if err != nil {
+		t.Fatalf("Open (migrate): %v", err)
+	}
+	defer conn.Close()
+
+	var version int
+	if err := conn.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if version != currentVersion {
+		t.Fatalf("user_version = %d, want %d", version, currentVersion)
+	}
+
+	var billiardCount int
+	if err := conn.QueryRow(`SELECT count(*) FROM billiard_entries`).Scan(&billiardCount); err != nil {
+		t.Fatalf("query billiard_entries (table should exist): %v", err)
+	}
+	if billiardCount != 0 {
+		t.Fatalf("billiard_entries count = %d, want 0", billiardCount)
+	}
+
+	var productCount int
+	if err := conn.QueryRow(`SELECT count(*) FROM products`).Scan(&productCount); err != nil {
+		t.Fatalf("query products: %v", err)
+	}
+	if productCount != 1 {
+		t.Fatalf("existing product data lost: count = %d, want 1", productCount)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatalf("read backup dir: %v", err)
+	}
+	var foundPremigration bool
+	for _, e := range entries {
+		if matched, _ := filepath.Match("shop-premigration-*.db", e.Name()); matched {
+			foundPremigration = true
+		}
+	}
+	if !foundPremigration {
+		t.Fatalf("no shop-premigration-*.db found in %s, entries: %v", backupDir, entries)
+	}
+}
+
+func TestMigrateV2ToV3TwiceAddsNothing(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shop.db")
+	backupDir := filepath.Join(dir, "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatalf("mkdir backups: %v", err)
+	}
+
+	makeV2SchemaDB(t, dbPath)
+
+	conn1, err := Open(dbPath, backupDir)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	conn1.Close()
+
+	conn2, err := Open(dbPath, backupDir)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	defer conn2.Close()
+
+	var version int
+	if err := conn2.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if version != currentVersion {
+		t.Fatalf("user_version = %d, want %d", version, currentVersion)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatalf("read backup dir: %v", err)
+	}
+	var premigrationCount int
+	for _, e := range entries {
+		if matched, _ := filepath.Match("shop-premigration-*.db", e.Name()); matched {
+			premigrationCount++
+		}
+	}
+	if premigrationCount != 1 {
+		t.Fatalf("premigration backup count = %d, want 1 (second Open shouldn't take another)", premigrationCount)
+	}
+}
+
 func TestNewDatabaseSkipsMigrationAndBackup(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "shop.db")
@@ -188,6 +317,11 @@ func TestNewDatabaseSkipsMigrationAndBackup(t *testing.T) {
 	}
 	if version != currentVersion {
 		t.Fatalf("user_version = %d, want %d", version, currentVersion)
+	}
+
+	var billiardCount int
+	if err := conn.QueryRow(`SELECT count(*) FROM billiard_entries`).Scan(&billiardCount); err != nil {
+		t.Fatalf("query billiard_entries (table should exist on a brand-new db): %v", err)
 	}
 
 	entries, err := os.ReadDir(backupDir)

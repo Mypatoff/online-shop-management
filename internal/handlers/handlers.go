@@ -26,6 +26,7 @@ var pages = map[string]page{
 	"sell":      {file: "templates/sell.html", active: "sell", pageScript: "sell.js"},
 	"sales":     {file: "templates/sales.html", active: "sales", pageScript: "sales.js"},
 	"stock-log": {file: "templates/stock-log.html", active: "stock-log", pageScript: "stock-log.js"},
+	"billiard":  {file: "templates/billiard.html", active: "billiard", pageScript: "billiard.js"},
 }
 
 // Handler serves pages; it holds the pre-parsed templates so a broken
@@ -70,6 +71,7 @@ func (h *Handler) Routes() (http.Handler, error) {
 	mux.HandleFunc("GET /sell", func(w http.ResponseWriter, r *http.Request) { h.render(w, "sell") })
 	mux.HandleFunc("GET /sales", func(w http.ResponseWriter, r *http.Request) { h.render(w, "sales") })
 	mux.HandleFunc("GET /stock-log", func(w http.ResponseWriter, r *http.Request) { h.render(w, "stock-log") })
+	mux.HandleFunc("GET /billiard", func(w http.ResponseWriter, r *http.Request) { h.render(w, "billiard") })
 
 	staticFS, err := fs.Sub(web.Static, "static")
 	if err != nil {

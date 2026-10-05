@@ -43,5 +43,9 @@ func (a *API) Routes(port int) http.Handler {
 	mux.HandleFunc("GET /api/sales/daily", a.handleDailySales)
 	mux.HandleFunc("GET /api/sales/chart", a.handleSalesChart)
 
+	mux.HandleFunc("GET /api/billiard", a.handleListBilliard)
+	mux.HandleFunc("POST /api/billiard", a.handleCreateBilliardEntry)
+	mux.HandleFunc("POST /api/billiard/{id}/void", a.handleVoidBilliardEntry)
+
 	return protect(allowedHosts(port))(requireJSON(mux))
 }

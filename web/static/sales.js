@@ -47,9 +47,10 @@ function loadDay(dateStr) {
 
 	apiFetch("/api/sales/daily?date=" + encodeURIComponent(dateStr)).then(function (data) {
 		currentData = data;
-		renderTotals(data.totals);
+		renderTotals(data.totals, data.billiard);
 		renderByProduct(data.by_product);
 		renderSales(data.sales);
+		renderBilliardDay(data.billiard);
 	});
 }
 
@@ -82,10 +83,41 @@ function formatTimeOfDay(unixSeconds) {
 	return h + ":" + m;
 }
 
-function renderTotals(totals) {
+function renderTotals(totals, billiard) {
 	document.getElementById("day-revenue").textContent = formatMoney(totals.revenue);
 	document.getElementById("day-units").textContent = totals.units;
 	document.getElementById("day-count").textContent = totals.sale_count;
+	document.getElementById("day-billiard-revenue").textContent = formatMoney(billiard.revenue);
+	document.getElementById("day-total-revenue-line").textContent =
+		"Total revenue: " + formatMoney(totals.total_revenue) + " (shop " + formatMoney(totals.revenue) + " + billiard " + formatMoney(billiard.revenue) + ")";
+}
+
+function renderBilliardDay(billiard) {
+	var tbody = document.getElementById("billiard-day-tbody");
+	var empty = document.getElementById("billiard-day-empty");
+	var wrap = document.getElementById("billiard-day-wrap");
+	tbody.textContent = "";
+
+	var entries = (billiard && billiard.entries) || [];
+	if (entries.length === 0) {
+		empty.classList.remove("hidden");
+		wrap.classList.add("hidden");
+		return;
+	}
+	empty.classList.add("hidden");
+	wrap.classList.remove("hidden");
+
+	entries.forEach(function (entry) {
+		var tr = document.createElement("tr");
+		if (entry.voided) tr.className = "voided-row";
+		addCell(tr, formatTimeOfDay(entry.created_at));
+		addCell(tr, entry.table || "—");
+		addCell(tr, entry.minutes != null ? String(entry.minutes) : "—");
+		addCell(tr, entry.note || "—");
+		addCell(tr, formatMoney(entry.amount));
+		addCell(tr, entry.voided ? "Voided" : "Completed");
+		tbody.appendChild(tr);
+	});
 }
 
 function renderByProduct(items) {
@@ -198,10 +230,18 @@ function buildDailyReport(data) {
 	appendListItem(totalsList, "Revenue: " + formatMoney(data.totals.revenue));
 	appendListItem(totalsList, "Units sold: " + data.totals.units);
 	appendListItem(totalsList, "Sales: " + data.totals.sale_count);
+	appendListItem(totalsList, "Billiard revenue: " + formatMoney(data.billiard.revenue));
+	appendListItem(totalsList, "Total revenue: shop + billiard = " + formatMoney(data.totals.total_revenue));
 	container.appendChild(totalsList);
 
 	if (data.totals.voided_count > 0) {
 		appendParagraph(container, data.totals.voided_count + " voided sale" + (data.totals.voided_count === 1 ? "" : "s") + " not counted.");
+	}
+	var voidedBilliardCount = data.billiard.entries.filter(function (e) {
+		return e.voided;
+	}).length;
+	if (voidedBilliardCount > 0) {
+		appendParagraph(container, voidedBilliardCount + " voided billiard entr" + (voidedBilliardCount === 1 ? "y" : "ies") + " not counted.");
 	}
 
 	appendHeading(container, "h2", "By product");
@@ -226,6 +266,23 @@ function buildDailyReport(data) {
 					formatMoney(sale.unit_price),
 					formatMoney(sale.total),
 					sale.voided ? "Voided" : "Completed",
+				];
+			})
+		)
+	);
+
+	appendHeading(container, "h2", "Billiard");
+	container.appendChild(
+		buildReportTable(
+			["Time", "Table", "Minutes", "Note", "Amount", "Status"],
+			data.billiard.entries.map(function (entry) {
+				return [
+					formatTimeOfDay(entry.created_at),
+					entry.table || "—",
+					entry.minutes != null ? String(entry.minutes) : "—",
+					entry.note || "—",
+					formatMoney(entry.amount),
+					entry.voided ? "Voided" : "Completed",
 				];
 			})
 		)

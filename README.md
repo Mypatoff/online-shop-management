@@ -118,6 +118,9 @@ even while the server is running.
 
 Every stock change — sales, voids, manual adjustments, and each product's initial balance — is recorded and viewable on the **Stock log** page (`/stock-log`), filterable by product.
 
+The **Billiard** page (`/billiard`) records money received for table time, with no stock or product involved.
+Billiard revenue is included in the dashboard's totals and the daily sales chart alongside regular shop sales, shown stacked with shop revenue.
+
 ## Printing
 
 On the Sales page, "Print daily report" prints that day's totals, by-product breakdown and full sale list, and each sale's "Receipt" button prints a narrow till-style receipt.

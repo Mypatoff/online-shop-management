@@ -15,12 +15,15 @@ type LowStockItem struct {
 }
 
 type Summary struct {
-	ActiveProducts int64          `json:"active_products"`
-	UnitsInStock   int64          `json:"units_in_stock"`
-	StockValue     int64          `json:"stock_value"`
-	TodayRevenue   int64          `json:"today_revenue"`
-	TodaySaleCount int64          `json:"today_sale_count"`
-	LowStock       []LowStockItem `json:"low_stock"`
+	ActiveProducts       int64          `json:"active_products"`
+	UnitsInStock         int64          `json:"units_in_stock"`
+	StockValue           int64          `json:"stock_value"`
+	TodayRevenue         int64          `json:"today_revenue"`
+	TodaySaleCount       int64          `json:"today_sale_count"`
+	BilliardRevenueToday int64          `json:"billiard_revenue_today"`
+	BilliardCountToday   int64          `json:"billiard_count_today"`
+	TotalRevenueToday    int64          `json:"total_revenue_today"`
+	LowStock             []LowStockItem `json:"low_stock"`
 }
 
 // Summary reports shop-wide numbers as of now. "Today" is the local
@@ -45,6 +48,14 @@ func (s *Store) Summary() (Summary, error) {
 	if err := row.Scan(&sum.TodayRevenue, &sum.TodaySaleCount); err != nil {
 		return Summary{}, fmt.Errorf("summary: sales: %w", err)
 	}
+
+	row = s.db.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0), COUNT(*)
+		FROM billiard_entries WHERE voided_at IS NULL AND created_at >= ? AND created_at < ?`, start, end)
+	if err := row.Scan(&sum.BilliardRevenueToday, &sum.BilliardCountToday); err != nil {
+		return Summary{}, fmt.Errorf("summary: billiard: %w", err)
+	}
+	sum.TotalRevenueToday = sum.TodayRevenue + sum.BilliardRevenueToday
 
 	rows, err := s.db.Query(`
 		SELECT id, name, sku, stock, low_stock_threshold

@@ -7,10 +7,11 @@ import (
 )
 
 type dailyTotalsDTO struct {
-	Revenue     int64 `json:"revenue"`
-	Units       int64 `json:"units"`
-	SaleCount   int64 `json:"sale_count"`
-	VoidedCount int64 `json:"voided_count"`
+	Revenue      int64 `json:"revenue"`
+	Units        int64 `json:"units"`
+	SaleCount    int64 `json:"sale_count"`
+	VoidedCount  int64 `json:"voided_count"`
+	TotalRevenue int64 `json:"total_revenue"`
 }
 
 type dailyProductDTO struct {
@@ -20,10 +21,17 @@ type dailyProductDTO struct {
 }
 
 type dailySalesDTO struct {
-	Date      string            `json:"date"`
-	Sales     []saleDTO         `json:"sales"`
-	Totals    dailyTotalsDTO    `json:"totals"`
-	ByProduct []dailyProductDTO `json:"by_product"`
+	Date      string               `json:"date"`
+	Sales     []saleDTO            `json:"sales"`
+	Totals    dailyTotalsDTO       `json:"totals"`
+	ByProduct []dailyProductDTO    `json:"by_product"`
+	Billiard  billiardDailyPartDTO `json:"billiard"`
+}
+
+type billiardDailyPartDTO struct {
+	Entries []billiardEntryDTO `json:"entries"`
+	Revenue int64              `json:"revenue"`
+	Count   int64              `json:"count"`
 }
 
 const dailyDateLayout = "2006-01-02"
@@ -47,11 +55,25 @@ func (a *API) handleDailySales(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load daily sales")
 		return
 	}
+	billiardEntries, err := a.store.DailyBilliard(day)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load daily billiard entries")
+		return
+	}
 
 	resp := dailySalesDTO{
 		Date:      day.Format(dailyDateLayout),
 		Sales:     make([]saleDTO, 0, len(sales)),
 		ByProduct: []dailyProductDTO{},
+		Billiard:  billiardDailyPartDTO{Entries: make([]billiardEntryDTO, 0, len(billiardEntries))},
+	}
+
+	for _, e := range billiardEntries {
+		resp.Billiard.Entries = append(resp.Billiard.Entries, toBilliardEntryDTO(e))
+		if !e.Voided() {
+			resp.Billiard.Revenue += e.Amount
+			resp.Billiard.Count++
+		}
 	}
 
 	byProduct := make(map[string]*dailyProductDTO)
@@ -82,6 +104,8 @@ func (a *API) handleDailySales(w http.ResponseWriter, r *http.Request) {
 	sort.SliceStable(resp.ByProduct, func(i, j int) bool {
 		return resp.ByProduct[i].Revenue > resp.ByProduct[j].Revenue
 	})
+
+	resp.Totals.TotalRevenue = resp.Totals.Revenue + resp.Billiard.Revenue
 
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -11,8 +11,10 @@ function renderSummary(summary) {
 	document.getElementById("stat-products").textContent = summary.active_products;
 	document.getElementById("stat-units").textContent = summary.units_in_stock;
 	document.getElementById("stat-stock-value").textContent = formatMoney(summary.stock_value);
-	document.getElementById("stat-revenue").textContent = formatMoney(summary.today_revenue);
+	document.getElementById("stat-revenue").textContent = formatMoney(summary.total_revenue_today);
+	document.getElementById("stat-revenue-breakdown").textContent = "Shop " + formatMoney(summary.today_revenue) + " + Billiard " + formatMoney(summary.billiard_revenue_today);
 	document.getElementById("stat-sales").textContent = summary.today_sale_count;
+	document.getElementById("stat-billiard").textContent = summary.billiard_count_today;
 
 	renderLowStock(summary.low_stock || []);
 }
@@ -136,7 +138,7 @@ function renderChart() {
 
 	var metric = chartState.metric;
 	var values = data.map(function (d) {
-		return metric === "units" ? d.units : d.revenue;
+		return metric === "units" ? d.units : d.revenue + d.billiard_revenue;
 	});
 	var maxValue = Math.max.apply(null, values);
 	var allZero = maxValue === 0;
@@ -194,27 +196,76 @@ function renderChart() {
 	var todayIndex = n - 1;
 	var showEveryLabel = chartState.range !== 30;
 	var barsToGrow = [];
+	var baselineY = marginTop + plotHeight;
 
+	// In the revenue view each day stacks two segments (shop, then
+	// billiard on top); the units view stays shop-only, a single
+	// segment. Both are drawn as "fill" rects that grow from zero
+	// height, under one invisible "hit" rect sized to the whole stack
+	// that carries the actual interactivity (focus/hover/tap/click) -
+	// so a bar with two colors is still one tab stop and one target.
 	data.forEach(function (entry, i) {
-		var value = metric === "units" ? entry.units : entry.revenue;
-		var barHeight = value > 0 ? Math.max((value / axisMax) * plotHeight, 2) : 1.5;
+		var isToday = i === todayIndex;
 		var x = marginLeft + i * barSlot + (barSlot - barWidth) / 2;
-		var yFull = marginTop + plotHeight - barHeight;
-		var colorClass = value === 0 ? "chart-bar-zero" : i === todayIndex ? "chart-bar-today" : "chart-bar-normal";
+		var segments =
+			metric === "units"
+				? [{ value: entry.units, cls: "chart-bar-shop" }]
+				: [
+						{ value: entry.revenue, cls: "chart-bar-shop" },
+						{ value: entry.billiard_revenue, cls: "chart-bar-billiard" },
+					];
+		var total = segments.reduce(function (sum, s) {
+			return sum + s.value;
+		}, 0);
 
-		var rect = document.createElementNS(SVG_NS, "rect");
-		rect.setAttribute("x", x);
-		rect.setAttribute("width", barWidth);
-		rect.setAttribute("y", marginTop + plotHeight);
-		rect.setAttribute("height", 0);
-		rect.setAttribute("rx", "2");
-		rect.setAttribute("tabindex", "0");
-		rect.setAttribute("role", "button");
-		rect.setAttribute("aria-label", barAriaLabel(entry, metric));
-		rect.setAttribute("class", "chart-bar " + colorClass);
-		wireBarInteractivity(rect, entry);
-		svg.appendChild(rect);
-		barsToGrow.push({ rect: rect, y: yFull, height: barHeight });
+		var stackTopY, stackHeight;
+		if (total === 0) {
+			stackHeight = 1.5;
+			stackTopY = baselineY - stackHeight;
+			var stub = document.createElementNS(SVG_NS, "rect");
+			stub.setAttribute("x", x);
+			stub.setAttribute("width", barWidth);
+			stub.setAttribute("rx", "2");
+			stub.setAttribute("class", "chart-bar-fill chart-bar-zero");
+			stub.setAttribute("aria-hidden", "true");
+			svg.appendChild(stub);
+			stub.setAttribute("y", baselineY);
+			stub.setAttribute("height", 0);
+			barsToGrow.push({ rect: stub, y: stackTopY, height: stackHeight });
+		} else {
+			var cumulative = 0;
+			segments.forEach(function (seg) {
+				if (seg.value <= 0) return;
+				var segHeight = Math.max((seg.value / axisMax) * plotHeight, 1);
+				var yTop = baselineY - cumulative - segHeight;
+				var rect = document.createElementNS(SVG_NS, "rect");
+				rect.setAttribute("x", x);
+				rect.setAttribute("width", barWidth);
+				rect.setAttribute("class", "chart-bar-fill " + seg.cls);
+				rect.setAttribute("aria-hidden", "true");
+				svg.appendChild(rect);
+				rect.setAttribute("y", baselineY);
+				rect.setAttribute("height", 0);
+				barsToGrow.push({ rect: rect, y: yTop, height: segHeight });
+				cumulative += segHeight;
+			});
+			stackHeight = cumulative;
+			stackTopY = baselineY - stackHeight;
+		}
+
+		var hit = document.createElementNS(SVG_NS, "rect");
+		hit.setAttribute("x", x);
+		hit.setAttribute("width", barWidth);
+		hit.setAttribute("y", stackTopY);
+		hit.setAttribute("height", Math.max(stackHeight, 1));
+		hit.setAttribute("rx", "2");
+		hit.setAttribute("tabindex", "0");
+		hit.setAttribute("role", "button");
+		hit.setAttribute("pointer-events", "all");
+		hit.setAttribute("aria-label", barAriaLabel(entry, metric));
+		hit.setAttribute("class", "chart-bar chart-bar-hit" + (isToday ? " chart-bar-today" : ""));
+		wireBarInteractivity(hit, entry);
+		svg.appendChild(hit);
 
 		if (showEveryLabel || i % 5 === 0) {
 			var xLabel = document.createElementNS(SVG_NS, "text");
@@ -286,33 +337,72 @@ function fullDateLabel(dateStr) {
 	return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
-function metricValueLabel(entry, metric) {
-	return metric === "units" ? entry.units + " units" : formatMoney(entry.revenue);
-}
-
 function barAriaLabel(entry, metric) {
-	return fullDateLabel(entry.date) + ", " + metricValueLabel(entry, metric) + ", " + entry.sale_count + " sale" + (entry.sale_count === 1 ? "" : "s") + ". Opens that day on the Sales page.";
+	if (metric === "units") {
+		return (
+			fullDateLabel(entry.date) + ", " + entry.units + " units, " + entry.sale_count + " sale" + (entry.sale_count === 1 ? "" : "s") + ". Opens that day on the Sales page."
+		);
+	}
+	var total = entry.revenue + entry.billiard_revenue;
+	return (
+		fullDateLabel(entry.date) +
+		", total " +
+		formatMoney(total) +
+		" (shop " +
+		formatMoney(entry.revenue) +
+		", billiard " +
+		formatMoney(entry.billiard_revenue) +
+		"). Opens that day on the Sales page."
+	);
 }
 
 function buildAriaSummary(data, metric) {
-	var total = 0;
-	var bestIndex = 0;
-	var bestValue = -1;
+	if (metric === "units") {
+		var totalUnits = 0;
+		var bestIndex = 0;
+		var bestUnits = -1;
+		data.forEach(function (entry, i) {
+			totalUnits += entry.units;
+			if (entry.units > bestUnits) {
+				bestUnits = entry.units;
+				bestIndex = i;
+			}
+		});
+		var unitsDetail = bestUnits > 0 ? "best day was " + fullDateLabel(data[bestIndex].date) + " with " + data[bestIndex].units + " units" : "no sales in this period";
+		return "Daily sales chart showing units sold for the last " + data.length + " days. Total " + totalUnits + " units; " + unitsDetail + ".";
+	}
+
+	var totalShop = 0;
+	var totalBilliard = 0;
+	var bestIndex2 = 0;
+	var bestCombined = -1;
 	data.forEach(function (entry, i) {
-		var v = metric === "units" ? entry.units : entry.revenue;
-		total += v;
-		if (v > bestValue) {
-			bestValue = v;
-			bestIndex = i;
+		totalShop += entry.revenue;
+		totalBilliard += entry.billiard_revenue;
+		var combined = entry.revenue + entry.billiard_revenue;
+		if (combined > bestCombined) {
+			bestCombined = combined;
+			bestIndex2 = i;
 		}
 	});
-	var metricLabel = metric === "units" ? "units sold" : "revenue";
-	var totalText = metric === "units" ? total + " units" : formatMoney(total);
+	var best = data[bestIndex2];
 	var detail =
-		bestValue > 0
-			? "best day was " + fullDateLabel(data[bestIndex].date) + " with " + metricValueLabel(data[bestIndex], metric)
+		bestCombined > 0
+			? "best day was " + fullDateLabel(best.date) + " with " + formatMoney(bestCombined) + " (shop " + formatMoney(best.revenue) + " plus billiard " + formatMoney(best.billiard_revenue) + ")"
 			: "no sales in this period";
-	return "Daily sales chart showing " + metricLabel + " for the last " + data.length + " days. Total " + totalText + "; " + detail + ".";
+	return (
+		"Daily sales chart showing revenue for the last " +
+		data.length +
+		" days. Total " +
+		formatMoney(totalShop + totalBilliard) +
+		" (shop " +
+		formatMoney(totalShop) +
+		" plus billiard " +
+		formatMoney(totalBilliard) +
+		"); " +
+		detail +
+		"."
+	);
 }
 
 function navigateToDate(dateStr) {
@@ -369,7 +459,14 @@ function showTooltip(entry, rect) {
 	if (!tooltip || !container) return;
 
 	tooltip.textContent = "";
-	[fullDateLabel(entry.date), "Revenue: " + formatMoney(entry.revenue), "Units: " + entry.units, "Sales: " + entry.sale_count].forEach(function (text) {
+	[
+		fullDateLabel(entry.date),
+		"Shop: " + formatMoney(entry.revenue),
+		"Billiard: " + formatMoney(entry.billiard_revenue),
+		"Total: " + formatMoney(entry.revenue + entry.billiard_revenue),
+		"Units: " + entry.units,
+		"Sales: " + entry.sale_count,
+	].forEach(function (text) {
 		var line = document.createElement("div");
 		line.textContent = text;
 		tooltip.appendChild(line);
@@ -401,7 +498,7 @@ function buildFallbackTable(data) {
 
 	var thead = document.createElement("thead");
 	var headRow = document.createElement("tr");
-	["Date", "Revenue", "Units", "Sales"].forEach(function (text) {
+	["Date", "Shop revenue", "Billiard revenue", "Total revenue", "Units", "Sales"].forEach(function (text) {
 		var th = document.createElement("th");
 		th.textContent = text;
 		headRow.appendChild(th);
@@ -414,6 +511,8 @@ function buildFallbackTable(data) {
 		var tr = document.createElement("tr");
 		addCell(tr, fullDateLabel(entry.date));
 		addCell(tr, formatMoney(entry.revenue));
+		addCell(tr, formatMoney(entry.billiard_revenue));
+		addCell(tr, formatMoney(entry.revenue + entry.billiard_revenue));
 		addCell(tr, String(entry.units));
 		addCell(tr, String(entry.sale_count));
 		tbody.appendChild(tr);

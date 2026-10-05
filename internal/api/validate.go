@@ -29,10 +29,13 @@ func validateRange(field string, v, min, max int64) error {
 }
 
 const (
-	maxPrice     = 1_000_000_000
-	maxStock     = 1_000_000
-	maxThreshold = 1_000_000
-	maxQuantity  = 100_000
+	maxPrice           = 1_000_000_000
+	maxStock           = 1_000_000
+	maxThreshold       = 1_000_000
+	maxQuantity        = 100_000
+	maxBilliardAmount  = 1_000_000_000
+	maxBilliardMinutes = 1440
+	maxTableNameLength = 30
 )
 
 func validatePrice(v int64) error { return validateRange("price", v, 0, maxPrice) }
@@ -41,6 +44,28 @@ func validateThreshold(v int64) error {
 	return validateRange("low_stock_threshold", v, 0, maxThreshold)
 }
 func validateQuantity(v int64) error { return validateRange("quantity", v, 1, maxQuantity) }
+
+func validateBilliardAmount(v int64) error {
+	return validateRange("amount", v, 1, maxBilliardAmount)
+}
+
+// validateTableName trims and bounds table, returning "" (stored as
+// NULL) when empty.
+func validateTableName(table string) (string, error) {
+	table = strings.TrimSpace(table)
+	if len(table) > maxTableNameLength {
+		return "", fmt.Errorf("table must be at most %d characters", maxTableNameLength)
+	}
+	return table, nil
+}
+
+// validateMinutes allows minutes to be omitted (nil).
+func validateMinutes(minutes *int64) error {
+	if minutes == nil {
+		return nil
+	}
+	return validateRange("minutes", *minutes, 0, maxBilliardMinutes)
+}
 
 var validAdjustReasons = map[string]bool{
 	"restock": true,

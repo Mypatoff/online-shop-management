@@ -180,6 +180,12 @@ input:focus-visible {
 	font-weight: 700;
 }
 
+.stat-sublabel {
+	color: var(--muted);
+	font-size: 0.75rem;
+	margin-top: 0.3rem;
+}
+
 /* ---- panels ---- */
 
 .panel {
@@ -566,21 +572,21 @@ select {
 	height: auto;
 }
 
-.chart-bar {
+.chart-bar-fill {
 	transition: height 0.2s ease, y 0.2s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.chart-bar {
+	.chart-bar-fill {
 		transition: none;
 	}
 }
 
-.chart-bar-normal {
+.chart-bar-shop {
 	fill: var(--green);
 }
 
-.chart-bar-today {
+.chart-bar-billiard {
 	fill: var(--blue);
 }
 
@@ -589,9 +595,23 @@ select {
 	opacity: 0.5;
 }
 
+/* The hit rect is the single interactive target per day: invisible,
+   sized to the full stacked bar (or the zero stub) underneath it. */
+.chart-bar-hit {
+	fill: transparent;
+}
+
 .chart-bar:focus-visible {
 	outline: 2px solid var(--blue);
 	outline-offset: 2px;
+}
+
+/* Today's bar is distinguished with an outline rather than a
+   distinct fill, since fill colors are now reserved for shop vs.
+   billiard. */
+.chart-bar-today {
+	stroke: var(--blue);
+	stroke-width: 2;
 }
 
 .chart-gridline {
@@ -641,6 +661,20 @@ select {
 	border: 0;
 }
 
+/* ---- billiard page ---- */
+
+#billiard-entry-form {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	max-width: 24rem;
+}
+
+.billiard-amount-input {
+	font-size: 1.75rem;
+	font-weight: 700;
+}
+
 /* ---- sales page ---- */
 
 .stats-grid-compact {
@@ -650,6 +684,11 @@ select {
 .voided-row {
 	color: var(--muted);
 	text-decoration: line-through;
+}
+
+.total-revenue-line {
+	font-weight: 700;
+	margin: 0 0 1.5rem;
 }
 
 /* ---- printing ---- */
@@ -714,7 +753,7 @@ select {
 
 @media (min-width: 640px) {
 	.stats-grid {
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(6, 1fr);
 	}
 
 	.stats-grid-compact {
