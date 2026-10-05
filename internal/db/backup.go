@@ -10,20 +10,29 @@ import (
 	"time"
 )
 
-// dailyBackupPattern matches the daily backup naming scheme, e.g.
-// "shop-2026-10-05.db". Anything else (including shop-premigration-*
-// files) is left alone by Rotate.
-var dailyBackupPattern = regexp.MustCompile(`^shop-(\d{4}-\d{2}-\d{2})\.db$`)
+// dailyBackupPattern matches both the rotating daily backup, e.g.
+// "shop-2026-10-05.db", and the start-of-day snapshot, e.g.
+// "shop-2026-10-05-start.db", capturing the date either way. Anything
+// else (including shop-premigration-* files) is left alone by Rotate.
+var dailyBackupPattern = regexp.MustCompile(`^shop-(\d{4}-\d{2}-\d{2})(?:-start)?\.db$`)
 
 // DailyBackupName returns the daily backup file name for t's local date.
 func DailyBackupName(t time.Time) string {
 	return fmt.Sprintf("shop-%s.db", t.Format("2006-01-02"))
 }
 
-// NeedsStartupBackup reports whether today's daily backup file is
-// missing from dir, in which case a startup backup should be taken.
-func NeedsStartupBackup(dir string, now time.Time) (bool, error) {
-	_, err := os.Stat(filepath.Join(dir, DailyBackupName(now)))
+// StartBackupName returns the start-of-day snapshot file name for t's
+// local date. Unlike the daily backup, this file is written once -
+// the first time it's missing - and never overwritten afterward, so
+// it stays a clean "beginning of today" point to restore to even
+// after hours of further sales.
+func StartBackupName(t time.Time) string {
+	return fmt.Sprintf("shop-%s-start.db", t.Format("2006-01-02"))
+}
+
+// missingFile reports whether name is absent from dir.
+func missingFile(dir, name string) (bool, error) {
+	_, err := os.Stat(filepath.Join(dir, name))
 	if err == nil {
 		return false, nil
 	}
@@ -31,6 +40,19 @@ func NeedsStartupBackup(dir string, now time.Time) (bool, error) {
 		return true, nil
 	}
 	return false, err
+}
+
+// NeedsStartupBackup reports whether today's daily backup file is
+// missing from dir, in which case a startup backup should be taken.
+func NeedsStartupBackup(dir string, now time.Time) (bool, error) {
+	return missingFile(dir, DailyBackupName(now))
+}
+
+// NeedsStartBackup reports whether today's start-of-day snapshot is
+// missing from dir. It's only ever true once per day: the snapshot is
+// never overwritten once it exists.
+func NeedsStartBackup(dir string, now time.Time) (bool, error) {
+	return missingFile(dir, StartBackupName(now))
 }
 
 // Backup writes a consistent snapshot of db to destPath. It runs
@@ -69,10 +91,10 @@ func Backup(db *sql.DB, destPath string) error {
 	return nil
 }
 
-// Rotate deletes daily backup files in dir (named shop-YYYY-MM-DD.db)
-// whose date is older than keepDays before today. Files that don't
-// match that exact name - including shop-premigration-* files - are
-// left untouched.
+// Rotate deletes daily backup files in dir (named shop-YYYY-MM-DD.db
+// or shop-YYYY-MM-DD-start.db) whose date is older than keepDays
+// before today. Files that don't match either pattern - including
+// shop-premigration-* files - are left untouched.
 func Rotate(dir string, keepDays int) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

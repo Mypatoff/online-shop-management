@@ -140,6 +140,19 @@ func TestVoidBilliardEntryTwiceIs409(t *testing.T) {
 	}
 }
 
+func TestVoidBilliardEntryUnknownIdIs404(t *testing.T) {
+	a := newTestAPI(t)
+
+	voidReq := httptest.NewRequest(http.MethodPost, "/api/billiard/999999/void", strings.NewReader("{}"))
+	voidReq.Host = "127.0.0.1:8080"
+	voidReq.Header.Set("Content-Type", "application/json")
+	voidRec := httptest.NewRecorder()
+	a.Routes(8080).ServeHTTP(voidRec, voidReq)
+	if voidRec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d, body: %s", voidRec.Code, http.StatusNotFound, voidRec.Body.String())
+	}
+}
+
 func TestListBilliardVoidedExcludedFromTotalsButListed(t *testing.T) {
 	a := newTestAPI(t)
 

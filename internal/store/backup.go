@@ -6,25 +6,37 @@ import (
 	"os"
 )
 
-// Backup writes a consistent snapshot of the database to w, using
-// SQLite's VACUUM INTO. It stages the snapshot in a temp file (VACUUM
-// INTO requires a path that doesn't already exist) and removes that
-// file once it has been streamed out.
-func (s *Store) Backup(w io.Writer) error {
+// BackupToTempFile creates a full snapshot of the database in a new
+// temp file, using SQLite's VACUUM INTO, and returns its path. The
+// caller owns the file and is responsible for removing it once done.
+// Creating the whole snapshot up front - before any bytes reach an
+// HTTP response - lets a caller like handleBackup fail with a clean
+// JSON error instead of a half-written download.
+func (s *Store) BackupToTempFile() (string, error) {
 	tmp, err := os.CreateTemp("", "shop-backup-*.db")
 	if err != nil {
-		return fmt.Errorf("backup: create temp file: %w", err)
+		return "", fmt.Errorf("backup: create temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
 	tmp.Close()
 	if err := os.Remove(tmpPath); err != nil {
-		return fmt.Errorf("backup: remove placeholder: %w", err)
+		return "", fmt.Errorf("backup: remove placeholder: %w", err)
 	}
-	defer os.Remove(tmpPath) //nolint:errcheck // best effort cleanup
 
 	if _, err := s.db.Exec(`VACUUM INTO ?`, tmpPath); err != nil {
-		return fmt.Errorf("backup: vacuum into: %w", err)
+		return "", fmt.Errorf("backup: vacuum into: %w", err)
 	}
+	return tmpPath, nil
+}
+
+// Backup writes a consistent snapshot of the database to w; see
+// BackupToTempFile.
+func (s *Store) Backup(w io.Writer) error {
+	tmpPath, err := s.BackupToTempFile()
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpPath) //nolint:errcheck // best effort cleanup
 
 	f, err := os.Open(tmpPath)
 	if err != nil {

@@ -82,6 +82,8 @@ func (a *API) handleVoidSale(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const maxSalesLimit = 500
+
 func (a *API) handleListSales(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if v := r.URL.Query().Get("limit"); v != "" {
@@ -91,6 +93,9 @@ func (a *API) handleListSales(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		limit = n
+	}
+	if limit > maxSalesLimit {
+		limit = maxSalesLimit
 	}
 
 	sales, err := a.store.ListSales(limit)

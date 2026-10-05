@@ -83,23 +83,33 @@ func (s *Store) GetBilliardEntry(id int64) (BilliardEntry, error) {
 }
 
 // VoidBilliardEntry marks an entry voided. There's no stock to
-// restore, unlike VoidSale.
+// restore, unlike VoidSale. The void itself is one UPDATE guarded by
+// "voided_at IS NULL", so two concurrent voids of the same entry can't
+// both succeed; a follow-up SELECT runs only if no row was touched, to
+// tell an unknown id (ErrNotFound) apart from an already-voided one
+// (ErrAlreadyVoided).
 func (s *Store) VoidBilliardEntry(id int64) error {
-	var voidedAt sql.NullInt64
-	row := s.db.QueryRow(`SELECT voided_at FROM billiard_entries WHERE id = ?`, id)
-	if err := row.Scan(&voidedAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("void billiard entry: lookup: %w", err)
-	}
-	if voidedAt.Valid {
-		return ErrAlreadyVoided
-	}
-	if _, err := s.db.Exec(`UPDATE billiard_entries SET voided_at = ? WHERE id = ?`, now(), id); err != nil {
+	res, err := s.db.Exec(`UPDATE billiard_entries SET voided_at = ? WHERE id = ? AND voided_at IS NULL`, now(), id)
+	if err != nil {
 		return fmt.Errorf("void billiard entry: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("void billiard entry: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+
+	var exists int
+	err = s.db.QueryRow(`SELECT 1 FROM billiard_entries WHERE id = ?`, id).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("void billiard entry: lookup: %w", err)
+	}
+	return ErrAlreadyVoided
 }
 
 // DailyBilliard returns every billiard entry (including voided) that

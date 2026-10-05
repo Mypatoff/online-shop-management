@@ -78,6 +78,79 @@ func TestRotate_DeletesOnlyOldDatedFiles(t *testing.T) {
 	assertExists(other, true)
 }
 
+func TestRotate_HandlesStartFilesAndKeepsToday(t *testing.T) {
+	dir := t.TempDir()
+
+	oldDaily := DailyBackupName(time.Now().AddDate(0, 0, -40))
+	oldStart := StartBackupName(time.Now().AddDate(0, 0, -40))
+	todayDaily := DailyBackupName(time.Now())
+	todayStart := StartBackupName(time.Now())
+	recentStart := StartBackupName(time.Now().AddDate(0, 0, -5))
+	premigration := "shop-premigration-2020-01-01.db"
+	other := "notes.txt"
+
+	for _, name := range []string{oldDaily, oldStart, todayDaily, todayStart, recentStart, premigration, other} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	if err := Rotate(dir, 30); err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+
+	assertExists := func(name string, want bool) {
+		_, err := os.Stat(filepath.Join(dir, name))
+		exists := err == nil
+		if exists != want {
+			t.Errorf("file %s: exists=%v, want %v", name, exists, want)
+		}
+	}
+
+	assertExists(oldDaily, false)
+	assertExists(oldStart, false)
+	assertExists(todayDaily, true)
+	assertExists(todayStart, true)
+	assertExists(recentStart, true)
+	assertExists(premigration, true)
+	assertExists(other, true)
+}
+
+func TestNeedsStartBackup_DoesNotOverwriteExistingToday(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+
+	needed, err := NeedsStartBackup(dir, now)
+	if err != nil {
+		t.Fatalf("NeedsStartBackup (missing): %v", err)
+	}
+	if !needed {
+		t.Fatal("expected start backup to be needed when today's start file is missing")
+	}
+
+	startPath := filepath.Join(dir, StartBackupName(now))
+	const marker = "this morning's snapshot"
+	if err := os.WriteFile(startPath, []byte(marker), 0o644); err != nil {
+		t.Fatalf("seed start file: %v", err)
+	}
+
+	needed, err = NeedsStartBackup(dir, now)
+	if err != nil {
+		t.Fatalf("NeedsStartBackup (present): %v", err)
+	}
+	if needed {
+		t.Fatal("expected no start backup needed once today's start file exists - it must never be overwritten")
+	}
+
+	got, err := os.ReadFile(startPath)
+	if err != nil {
+		t.Fatalf("read start file: %v", err)
+	}
+	if string(got) != marker {
+		t.Fatalf("start file was modified: got %q, want %q", got, marker)
+	}
+}
+
 func TestNeedsStartupBackup_DoesNotOverwriteExistingToday(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()

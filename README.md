@@ -5,7 +5,7 @@ or `.sh` file — no install, no internet connection required.
 
 ## Prerequisites
 
-- Go 1.22 or later
+- Go 1.27.1 or later
 
 ## Run
 
@@ -91,19 +91,27 @@ info", then "Run anyway".
 
 ### Automatic daily backups
 
-The server keeps its own daily backups without any action needed:
+The server keeps its own daily backups without any action needed, and
+writes two different kinds of file each day:
 
-- On startup, if today's backup doesn't exist yet, it takes one.
-- Every 6 hours while running, it takes one (overwriting today's file).
-- On graceful shutdown (Ctrl-C or SIGTERM), it takes one last backup
-  before closing the database.
+- `shop-YYYY-MM-DD.db` — the rotating daily backup. On startup, if
+  today's doesn't exist yet, it takes one. Every 6 hours while
+  running, it takes one (overwriting today's file). On graceful
+  shutdown (Ctrl-C or SIGTERM), it takes one last backup before
+  closing the database. Because it's repeatedly overwritten, it always
+  reflects roughly "the last few hours," not any one specific moment.
+- `shop-YYYY-MM-DD-start.db` — a start-of-day snapshot, written once
+  at startup if it doesn't already exist, and never overwritten again
+  that day (even across restarts). This is your way back to "this
+  morning": if something goes wrong partway through the day, it's the
+  one backup guaranteed not to already contain today's changes.
 
 Backups live in `BACKUP_DIR` (default: a `backups` folder next to the
-database file), named `shop-YYYY-MM-DD.db`. The absolute path is
-printed at startup. Backups older than `BACKUP_KEEP_DAYS` (default 30)
-are deleted after each backup runs. Files that don't match the
-`shop-YYYY-MM-DD.db` pattern — including any `shop-premigration-*`
-files — are never touched by rotation.
+database file). The absolute path is printed at startup. Backups older
+than `BACKUP_KEEP_DAYS` (default 30) are deleted after each backup
+runs, whether `-start` or not. Files that don't match either pattern —
+including any `shop-premigration-*` files — are never touched by
+rotation.
 
 Tip: point `BACKUP_DIR` at a USB drive or a cloud-synced folder (e.g.
 Dropbox/Google Drive/OneDrive) to automatically get an off-machine copy.

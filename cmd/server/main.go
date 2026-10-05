@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"errors"
@@ -24,7 +25,27 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, "ShopKeeper failed to start:")
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "\nPress Enter to close this window (closing automatically in 20 seconds)...")
+		waitForEnterOrTimeout(20 * time.Second)
+		os.Exit(1)
+	}
+}
+
+// waitForEnterOrTimeout blocks until stdin produces a line (the user
+// pressing Enter) or d elapses, whichever comes first - so a
+// double-clicked window showing a startup error stays on screen long
+// enough to be read instead of vanishing immediately.
+func waitForEnterOrTimeout(d time.Duration) {
+	enter := make(chan struct{})
+	go func() {
+		bufio.NewReader(os.Stdin).ReadString('\n') //nolint:errcheck // best effort; timeout covers a closed/absent stdin
+		close(enter)
+	}()
+	select {
+	case <-enter:
+	case <-time.After(d):
 	}
 }
 
@@ -53,6 +74,17 @@ func run() error {
 		log.Printf("backup: check today's file: %v", err)
 	} else if needed {
 		runBackup(conn, cfg.BackupDir, cfg.BackupKeepDays)
+	}
+
+	if needed, err := db.NeedsStartBackup(cfg.BackupDir, time.Now()); err != nil {
+		log.Printf("backup: check start-of-day file: %v", err)
+	} else if needed {
+		startPath := filepath.Join(cfg.BackupDir, db.StartBackupName(time.Now()))
+		if err := db.Backup(conn, startPath); err != nil {
+			log.Printf("START-OF-DAY BACKUP FAILED: %v", err)
+		} else {
+			log.Printf("start-of-day backup written: %s", startPath)
+		}
 	}
 
 	backupStop := make(chan struct{})

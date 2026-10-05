@@ -35,6 +35,7 @@ qtyInput.addEventListener("input", function () {
 sellBtn.onclick = function () {
 	if (!selected) return;
 	var quantity = currentQuantity();
+	var productID = selected.id;
 	sellErrorEl.textContent = "";
 	sellBtn.disabled = true;
 
@@ -50,9 +51,22 @@ sellBtn.onclick = function () {
 		})
 		.catch(function (err) {
 			sellErrorEl.textContent = err.message;
+			// The sale may have failed because stock changed underneath
+			// us (e.g. sold out on another tab): reload products and
+			// re-select so the stock number and quantity stepper are
+			// trustworthy again, not just whatever they showed before.
+			return loadProducts().then(function () {
+				var fresh = allProducts.find(function (item) {
+					return item.id === productID;
+				});
+				if (fresh) selectProduct(fresh);
+			});
 		})
 		.finally(function () {
-			sellBtn.disabled = false;
+			// Driven by actual stock, not unconditionally re-enabled: a
+			// sold-out product must stay disabled even after this sale
+			// (or reload) finishes.
+			sellBtn.disabled = !selected || selected.stock <= 0;
 		});
 };
 
