@@ -27,8 +27,8 @@ func Load() (Config, error) {
 	cfg := Config{
 		Port:           8080,
 		DBPath:         defaultDBPath(),
-		Currency:       "USD",
-		Decimals:       2,
+		Currency:       "so'm",
+		Decimals:       0,
 		ShopName:       "ShopKeeper",
 		BackupKeepDays: 30,
 	}

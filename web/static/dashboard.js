@@ -144,9 +144,22 @@ function renderChart() {
 	var allZero = maxValue === 0;
 	var axisMax = niceCeil(allZero ? (metric === "units" ? 10 : 1000) : maxValue);
 
+	// Y tick labels are computed up front (not just at render time) so
+	// the left margin can be sized to whichever of the 5 labels (0%,
+	// 25%, 50%, 75%, 100%) turns out longest - e.g. "1.2M" needs less
+	// room than "999 999" would in the old full-money format.
+	var tickLabels = [];
+	for (var t = 0; t <= 4; t++) {
+		var tv = Math.round(axisMax * (t / 4));
+		tickLabels[t] = metric === "units" ? String(tv) : compactAxisLabel(tv);
+	}
+	var longestLabel = tickLabels.reduce(function (a, b) {
+		return b.length > a.length ? b : a;
+	}, "");
+
 	var width = 600;
 	var height = 220;
-	var marginLeft = 78;
+	var marginLeft = longestLabel.length * 8 + 12;
 	var marginRight = 10;
 	var marginTop = 10;
 	var marginBottom = 28;
@@ -155,6 +168,7 @@ function renderChart() {
 
 	var svg = document.createElementNS(SVG_NS, "svg");
 	svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+	svg.setAttribute("overflow", "visible");
 	svg.setAttribute("class", "chart-svg");
 	svg.setAttribute("role", "img");
 	svg.setAttribute("aria-label", buildAriaSummary(data, metric));
@@ -171,14 +185,13 @@ function renderChart() {
 		line.setAttribute("class", "chart-gridline");
 		svg.appendChild(line);
 
-		var tickValue = Math.round(axisMax * frac);
 		var label = document.createElementNS(SVG_NS, "text");
 		label.setAttribute("x", marginLeft - 8);
 		label.setAttribute("y", y);
 		label.setAttribute("text-anchor", "end");
 		label.setAttribute("dominant-baseline", "middle");
 		label.setAttribute("class", "chart-axis-label");
-		label.textContent = metric === "units" ? String(tickValue) : formatMoney(tickValue);
+		label.textContent = tickLabels[i];
 		svg.appendChild(label);
 	}
 
@@ -189,6 +202,15 @@ function renderChart() {
 	baseline.setAttribute("y2", marginTop + plotHeight);
 	baseline.setAttribute("class", "chart-axis-line");
 	svg.appendChild(baseline);
+
+	var baselineLabel = document.createElementNS(SVG_NS, "text");
+	baselineLabel.setAttribute("x", marginLeft - 8);
+	baselineLabel.setAttribute("y", marginTop + plotHeight);
+	baselineLabel.setAttribute("text-anchor", "end");
+	baselineLabel.setAttribute("dominant-baseline", "middle");
+	baselineLabel.setAttribute("class", "chart-axis-label");
+	baselineLabel.textContent = tickLabels[0];
+	svg.appendChild(baselineLabel);
 
 	var n = data.length;
 	var barSlot = plotWidth / n;
@@ -288,6 +310,7 @@ function renderChart() {
 		svg.appendChild(emptyLabel);
 	}
 
+	container.appendChild(buildAxisUnitLabel(metric));
 	container.appendChild(svg);
 	container.appendChild(buildTooltipEl());
 	container.appendChild(buildFallbackTable(data));
@@ -306,6 +329,61 @@ function renderChart() {
 			});
 		});
 	});
+}
+
+// buildAxisUnitLabel is the small muted label shown once above the
+// chart (top-left of the card) instead of repeating the currency code
+// on every Y tick - e.g. "Revenue, so'm". The units view has no
+// currency to show.
+function buildAxisUnitLabel(metric) {
+	var label = document.createElement("div");
+	label.className = "chart-axis-unit-label";
+	if (metric === "units") {
+		label.textContent = "Units";
+	} else {
+		var currency = (window.appConfig && window.appConfig.currency) || "";
+		label.textContent = currency ? "Revenue, " + currency : "Revenue";
+	}
+	return label;
+}
+
+// compactAxisLabel renders one Y-axis tick as a compact string in
+// major units (so'm, not minor units) with no currency code: below
+// 1,000 the plain integer, 1,000-999,999 as "50k"/"12.5k" (at most one
+// decimal, dropped when zero), 1,000,000+ as "1.2M". Pure integer
+// math throughout - no parseFloat/toFixed.
+function compactAxisLabel(amount) {
+	var cfg = window.appConfig || { decimals: 0 };
+	var scale = 1;
+	for (var i = 0; i < cfg.decimals; i++) scale *= 10;
+	return compactNumber(Math.floor(amount / scale));
+}
+
+function compactNumber(value) {
+	var negative = value < 0;
+	var abs = Math.abs(value);
+	var text;
+
+	if (abs < 1000) {
+		text = String(abs);
+	} else if (abs < 1000000) {
+		var thousands = Math.floor(abs / 1000);
+		var tenthsOfK = Math.floor(((abs - thousands * 1000) + 50) / 100);
+		if (tenthsOfK === 10) {
+			thousands += 1;
+			tenthsOfK = 0;
+		}
+		text = tenthsOfK === 0 ? thousands + "k" : thousands + "." + tenthsOfK + "k";
+	} else {
+		var millions = Math.floor(abs / 1000000);
+		var tenthsOfM = Math.floor(((abs - millions * 1000000) + 50000) / 100000);
+		if (tenthsOfM === 10) {
+			millions += 1;
+			tenthsOfM = 0;
+		}
+		text = tenthsOfM === 0 ? millions + "M" : millions + "." + tenthsOfM + "M";
+	}
+	return (negative ? "-" : "") + text;
 }
 
 // niceCeil rounds value up to a "nice" number (1/2/5/10 times a power

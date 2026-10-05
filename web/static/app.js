@@ -32,11 +32,30 @@ function apiFetch(path, options) {
 	});
 }
 
-// formatMoney turns integer minor units (e.g. cents) into a display
-// string like "12.50 USD", using only integer math: no parseFloat, no
-// division that could lose precision.
+// NBSP (U+00A0) separates thousands groups, and separates the trailing
+// currency label from the number — using a non-breaking space (rather
+// than a regular one) keeps "150 000 so'm" from ever wrapping onto two
+// lines.
+var NBSP = " ";
+
+// groupThousands inserts NBSP every 3 digits from the right, e.g.
+// "150000" -> "150 000". digits must be a plain non-negative
+// integer string (no sign, no separators).
+function groupThousands(digits) {
+	var out = "";
+	for (var i = 0; i < digits.length; i++) {
+		if (i > 0 && (digits.length - i) % 3 === 0) out += NBSP;
+		out += digits[i];
+	}
+	return out;
+}
+
+// formatMoney turns an integer amount in minor units (whole so'm when
+// DECIMALS=0) into a display string like "150 000 so'm",
+// using only integer math: no parseFloat, no division that could lose
+// precision. Negative amounts get a leading minus sign.
 function formatMoney(amount) {
-	var cfg = window.appConfig || { currency: "", decimals: 2 };
+	var cfg = window.appConfig || { currency: "", decimals: 0 };
 	var decimals = cfg.decimals;
 	var negative = amount < 0;
 	var abs = Math.abs(amount);
@@ -49,31 +68,48 @@ function formatMoney(amount) {
 	var fracStr = String(frac);
 	while (fracStr.length < decimals) fracStr = "0" + fracStr;
 
-	var display = decimals > 0 ? whole + "." + fracStr : String(whole);
-	return (negative ? "-" : "") + display + (cfg.currency ? " " + cfg.currency : "");
+	var display = groupThousands(String(whole));
+	if (decimals > 0) display += "," + fracStr;
+
+	var withSign = (negative ? "-" : "") + display;
+	return cfg.currency ? withSign + NBSP + cfg.currency : withSign;
 }
 
-// parseMoney turns user input like "12.5" or "12,50" into integer
-// minor units. It never calls parseFloat: it splits the string on the
-// decimal separator and parses each half with parseInt. Throws an
-// Error with a user-facing message on invalid input.
+// parseMoney turns user input into an integer amount in minor units.
+// It never calls parseFloat. With DECIMALS=0 (the default) it accepts
+// only digits and plain/non-breaking spaces as thousands separators;
+// any "." or "," is rejected outright with a message steering the user
+// toward whole so'm. With DECIMALS>0 it keeps the previous behavior:
+// splitting on "," or "." and parsing each half with parseInt. Throws
+// an Error with a user-facing message on invalid input.
 function parseMoney(input) {
-	var cfg = window.appConfig || { decimals: 2 };
+	var cfg = window.appConfig || { decimals: 0 };
 	var decimals = cfg.decimals;
-	var s = String(input).trim().replace(",", ".");
+	var stripped = String(input).trim().replace(/\s/g, "");
 
-	if (s === "") throw new Error("Enter a price.");
+	if (stripped === "") throw new Error("Enter an amount.");
 
+	if (decimals === 0) {
+		if (stripped.indexOf(".") !== -1 || stripped.indexOf(",") !== -1) {
+			throw new Error("Enter whole so'm without decimals, e.g. 150000");
+		}
+		if (!/^\d+$/.test(stripped)) {
+			throw new Error("Enter whole so'm without decimals, e.g. 150000");
+		}
+		return parseInt(stripped, 10);
+	}
+
+	var s = stripped.replace(",", ".");
 	var parts = s.split(".");
-	if (parts.length > 2) throw new Error("Price has too many decimal points.");
+	if (parts.length > 2) throw new Error("Amount has too many decimal points.");
 
 	var wholePart = parts[0];
 	var fracPart = parts.length === 2 ? parts[1] : "";
 
-	if (!/^\d+$/.test(wholePart)) throw new Error("Price must be a plain number.");
-	if (fracPart !== "" && !/^\d+$/.test(fracPart)) throw new Error("Price must be a plain number.");
+	if (!/^\d+$/.test(wholePart)) throw new Error("Amount must be a plain number.");
+	if (fracPart !== "" && !/^\d+$/.test(fracPart)) throw new Error("Amount must be a plain number.");
 	if (fracPart.length > decimals) {
-		throw new Error("Price allows at most " + decimals + " decimal place" + (decimals === 1 ? "" : "s") + ".");
+		throw new Error("Amount allows at most " + decimals + " decimal place" + (decimals === 1 ? "" : "s") + ".");
 	}
 	while (fracPart.length < decimals) fracPart += "0";
 

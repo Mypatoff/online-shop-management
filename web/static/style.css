@@ -545,6 +545,7 @@ select {
 	border-radius: 6px;
 	padding: 0.4rem 0.65rem;
 	cursor: pointer;
+	outline: none;
 }
 
 .segmented-btn.active {
@@ -566,8 +567,15 @@ select {
 	position: relative;
 }
 
+.chart-axis-unit-label {
+	color: var(--muted);
+	font-size: 0.75rem;
+	margin-bottom: 0.25rem;
+}
+
 .chart-svg {
 	display: block;
+	overflow: visible;
 	width: 100%;
 	height: auto;
 }

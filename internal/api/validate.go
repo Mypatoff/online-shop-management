@@ -29,11 +29,11 @@ func validateRange(field string, v, min, max int64) error {
 }
 
 const (
-	maxPrice           = 1_000_000_000
+	maxPrice           = 100_000_000_000
 	maxStock           = 1_000_000
 	maxThreshold       = 1_000_000
 	maxQuantity        = 100_000
-	maxBilliardAmount  = 1_000_000_000
+	maxBilliardAmount  = 100_000_000_000
 	maxBilliardMinutes = 1440
 	maxTableNameLength = 30
 )

@@ -25,12 +25,24 @@ All optional:
 | --- | --- | --- |
 | `PORT` | `8080` | Port to listen on (binds `127.0.0.1` only) |
 | `DB_PATH` | next to the executable (see below) | Path to the SQLite database file |
-| `CURRENCY` | `USD` | Currency label shown in the UI |
-| `DECIMALS` | `2` | Decimal places shown in the UI (0-3) |
+| `CURRENCY` | `so'm` | Currency label shown in the UI |
+| `DECIMALS` | `0` | Decimal places shown in the UI (0-3) |
 | `SHOP_NAME` | `ShopKeeper` | Shop name shown in printed reports and receipts |
 | `BACKUP_DIR` | `backups` folder next to the database file | Where automatic daily backups are written |
 | `BACKUP_KEEP_DAYS` | `30` | How many days of daily backups to keep before they're rotated out |
 | `NO_BROWSER` | unset | Set to `1` to stop the app from opening your browser on startup |
+
+## Currency
+
+The app defaults to Uzbek so'm (`CURRENCY=so'm`, `DECIMALS=0`): all
+amounts are whole numbers, entered and displayed without decimals
+(e.g. `150000`, shown as "150 000 so'm"). Prices, billiard amounts and
+sale totals accept whole numbers from 0 to 100,000,000,000.
+
+To use a currency with cents/decimals instead (e.g. US dollars), set
+`CURRENCY=USD` and `DECIMALS=2`; amounts are then entered and
+displayed with up to `DECIMALS` decimal places (e.g. `12.50`).
+`DECIMALS` must be an integer from 0 to 3.
 
 ## Database location
 

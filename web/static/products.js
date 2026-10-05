@@ -177,8 +177,8 @@ function validateProductForm(values, opts) {
 	} catch (err) {
 		throw fieldError("price", err.message);
 	}
-	if (price < 0 || price > 1000000000) {
-		throw fieldError("price", "Price must be between 0 and 1,000,000,000.");
+	if (price < 0 || price > 100000000000) {
+		throw fieldError("price", "Price must be between 0 and 100,000,000,000.");
 	}
 
 	var threshold;

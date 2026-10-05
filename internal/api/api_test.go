@@ -16,7 +16,7 @@ func newTestAPI(t *testing.T) *API {
 		t.Fatalf("open test db: %v", err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	return New(store.New(conn), "Test Shop", "USD", 2)
+	return New(store.New(conn), "Test Shop", "so'm", 0)
 }
 
 func TestWrongHostRejected(t *testing.T) {

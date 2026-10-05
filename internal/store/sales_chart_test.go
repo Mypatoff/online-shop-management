@@ -78,6 +78,27 @@ func TestSalesChartExcludesVoided(t *testing.T) {
 	}
 }
 
+func TestSalesChartSumOfLargeSalesDoesNotOverflow(t *testing.T) {
+	s := newTestStore(t)
+	p := mustCreateProduct(t, s, "Bulk item", "", 100_000_000_000, 200_000, 5)
+
+	today := time.Date(2026, 6, 15, 12, 0, 0, 0, time.Local)
+	mustInsertSale(t, s, p, 100_000, today.Unix(), false)
+	mustInsertSale(t, s, p, 100_000, today.Unix(), false)
+
+	buckets, err := s.SalesChart(1, today)
+	if err != nil {
+		t.Fatalf("sales chart: %v", err)
+	}
+	wantRevenue := int64(100_000_000_000) * 100_000 * 2
+	if buckets[0].Revenue != wantRevenue {
+		t.Fatalf("revenue = %d, want %d (no int64 overflow)", buckets[0].Revenue, wantRevenue)
+	}
+	if buckets[0].Revenue < 0 {
+		t.Fatal("revenue went negative: overflowed int64")
+	}
+}
+
 func TestSalesChartDSTRangeHasExactlyNDistinctDates(t *testing.T) {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
