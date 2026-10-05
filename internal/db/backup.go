@@ -1,0 +1,106 @@
+package db
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"time"
+)
+
+// dailyBackupPattern matches the daily backup naming scheme, e.g.
+// "shop-2026-10-05.db". Anything else (including shop-premigration-*
+// files) is left alone by Rotate.
+var dailyBackupPattern = regexp.MustCompile(`^shop-(\d{4}-\d{2}-\d{2})\.db$`)
+
+// DailyBackupName returns the daily backup file name for t's local date.
+func DailyBackupName(t time.Time) string {
+	return fmt.Sprintf("shop-%s.db", t.Format("2006-01-02"))
+}
+
+// NeedsStartupBackup reports whether today's daily backup file is
+// missing from dir, in which case a startup backup should be taken.
+func NeedsStartupBackup(dir string, now time.Time) (bool, error) {
+	_, err := os.Stat(filepath.Join(dir, DailyBackupName(now)))
+	if err == nil {
+		return false, nil
+	}
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+	return false, err
+}
+
+// Backup writes a consistent snapshot of db to destPath. It runs
+// PRAGMA quick_check first and aborts without touching destPath if the
+// database isn't healthy. Otherwise it uses VACUUM INTO to write the
+// snapshot to a temp file in destPath's directory, then renames it into
+// place, so destPath is never left as a half-written file.
+func Backup(db *sql.DB, destPath string) error {
+	var result string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
+		return fmt.Errorf("backup: quick_check: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("backup: database failed quick_check: %s", result)
+	}
+
+	dir := filepath.Dir(destPath)
+	tmp, err := os.CreateTemp(dir, "shop-backup-*.db.tmp")
+	if err != nil {
+		return fmt.Errorf("backup: create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	if err := os.Remove(tmpPath); err != nil {
+		return fmt.Errorf("backup: remove placeholder: %w", err)
+	}
+	defer os.Remove(tmpPath) //nolint:errcheck // best effort cleanup once renamed away
+
+	if _, err := db.Exec(`VACUUM INTO ?`, tmpPath); err != nil {
+		return fmt.Errorf("backup: vacuum into: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("backup: rename into place: %w", err)
+	}
+	return nil
+}
+
+// Rotate deletes daily backup files in dir (named shop-YYYY-MM-DD.db)
+// whose date is older than keepDays before today. Files that don't
+// match that exact name - including shop-premigration-* files - are
+// left untouched.
+func Rotate(dir string, keepDays int) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("rotate: read dir: %w", err)
+	}
+
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	cutoff := today.AddDate(0, 0, -keepDays)
+
+	var errs []error
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		m := dailyBackupPattern.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		date, err := time.ParseInLocation("2006-01-02", m[1], time.Local)
+		if err != nil {
+			continue
+		}
+		if date.Before(cutoff) {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}

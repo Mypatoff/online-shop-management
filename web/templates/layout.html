@@ -1,0 +1,45 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ShopKeeper</title>
+	<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+	<header class="topbar no-print">
+		<div class="topbar-inner">
+			<span class="brand">ShopKeeper</span>
+			<nav>
+				<a href="/" class="{{if eq .Active "dashboard"}}active{{end}}">Dashboard</a>
+				<a href="/products" class="{{if eq .Active "products"}}active{{end}}">Products</a>
+				<a href="/sell" class="{{if eq .Active "sell"}}active{{end}}">Sell</a>
+				<a href="/sales" class="{{if eq .Active "sales"}}active{{end}}">Sales</a>
+				<a href="/stock-log" class="{{if eq .Active "stock-log"}}active{{end}}">Stock log</a>
+				<a href="/api/backup" class="backup-link" download>Download backup</a>
+			</nav>
+		</div>
+	</header>
+
+	<main class="page">
+		{{template "content" .}}
+	</main>
+
+	<dialog id="modal" class="modal no-print">
+		<form id="modal-form" class="modal-form">
+			<h2 id="modal-title"></h2>
+			<div id="modal-body" class="modal-body"></div>
+			<p id="modal-error" class="error" role="alert"></p>
+			<div class="modal-actions">
+				<button type="button" id="modal-cancel" class="btn btn-ghost">Cancel</button>
+				<button type="submit" id="modal-submit" class="btn btn-primary">Save</button>
+			</div>
+		</form>
+	</dialog>
+
+	<script src="/static/app.js"></script>
+	{{if .PageScript}}<script src="/static/{{.PageScript}}"></script>{{end}}
+</body>
+</html>
+{{end}}

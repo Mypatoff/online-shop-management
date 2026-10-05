@@ -1,0 +1,35 @@
+{{define "content"}}
+<h1>Sell</h1>
+
+<section class="panel">
+	<label class="field">
+		<span>Search product</span>
+		<input type="search" id="sell-search" placeholder="Search by name or SKU" aria-label="Search products">
+	</label>
+	<ul id="sell-results" class="sell-results"></ul>
+
+	<div id="sell-selected" class="sell-selected hidden">
+		<div class="selected-name" id="selected-name"></div>
+		<div class="selected-price" id="selected-price"></div>
+
+		<div class="stepper">
+			<button type="button" id="qty-dec" class="btn btn-secondary btn-small" aria-label="Decrease quantity">−</button>
+			<input type="number" id="qty-input" value="1" min="1" step="1" aria-label="Quantity">
+			<button type="button" id="qty-inc" class="btn btn-secondary btn-small" aria-label="Increase quantity">+</button>
+		</div>
+
+		<p class="sell-total">Total: <span id="sell-total">—</span></p>
+
+		<button type="button" id="sell-btn" class="btn btn-sell">Sell</button>
+		<p id="sell-error" class="error" role="alert"></p>
+	</div>
+</section>
+
+<section class="panel">
+	<h2>Recent sales</h2>
+	<p id="recent-sales-empty" class="empty hidden">No sales yet.</p>
+	<ul id="recent-sales-list" class="recent-sales-list"></ul>
+</section>
+
+<div id="toast" class="toast hidden" role="status"></div>
+{{end}}

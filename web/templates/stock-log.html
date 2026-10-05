@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="page-header">
+	<h1>Stock log</h1>
+</div>
+
+<div class="toolbar">
+	<label class="field-inline">
+		<span>Product</span>
+		<select id="product-filter"></select>
+	</label>
+</div>
+
+<p id="stock-log-empty" class="empty hidden">No stock movements yet.</p>
+
+<div class="table-scroll" id="stock-log-wrap">
+	<table class="data-table" id="stock-log-table">
+		<thead>
+			<tr>
+				<th>Time</th>
+				<th>Product</th>
+				<th>Type</th>
+				<th>Change</th>
+				<th>Stock after</th>
+				<th>Reason</th>
+				<th>Note</th>
+			</tr>
+		</thead>
+		<tbody id="stock-log-tbody"></tbody>
+	</table>
+</div>
+
+<div class="toolbar">
+	<button type="button" id="load-more-btn" class="btn btn-secondary hidden">Load more</button>
+</div>
+{{end}}

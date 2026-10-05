@@ -1,0 +1,6 @@
+*.db
+*.db-*
+backups/
+*.exe
+.env
+dist/

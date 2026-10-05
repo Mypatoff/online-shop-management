@@ -1,0 +1,50 @@
+{{define "content"}}
+<h1>Dashboard</h1>
+
+<section class="stats-grid" id="stats-grid">
+	<div class="stat-card">
+		<div class="stat-label">Products</div>
+		<div class="stat-value" id="stat-products">—</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-label">Units in stock</div>
+		<div class="stat-value" id="stat-units">—</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-label">Stock value</div>
+		<div class="stat-value" id="stat-stock-value">—</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-label">Today's revenue</div>
+		<div class="stat-value" id="stat-revenue">—</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-label">Today's sales</div>
+		<div class="stat-value" id="stat-sales">—</div>
+	</div>
+</section>
+
+<section class="panel chart-panel no-print" id="chart-panel">
+	<div class="chart-header">
+		<h2>Daily sales</h2>
+		<div class="chart-controls">
+			<div class="segmented" id="chart-range-toggle" role="group" aria-label="Date range">
+				<button type="button" class="segmented-btn active" data-value="7" aria-pressed="true">7 days</button>
+				<button type="button" class="segmented-btn" data-value="30" aria-pressed="false">30 days</button>
+			</div>
+			<div class="segmented" id="chart-metric-toggle" role="group" aria-label="Metric">
+				<button type="button" class="segmented-btn active" data-value="revenue" aria-pressed="true">Revenue</button>
+				<button type="button" class="segmented-btn" data-value="units" aria-pressed="false">Units</button>
+			</div>
+		</div>
+	</div>
+	<p id="chart-status" class="chart-status">Loading chart...</p>
+	<div id="chart-container" class="chart-container hidden"></div>
+</section>
+
+<section class="panel">
+	<h2>Low stock</h2>
+	<p id="low-stock-empty" class="empty hidden">Nothing is low on stock right now.</p>
+	<ul id="low-stock-list" class="low-stock-list"></ul>
+</section>
+{{end}}
