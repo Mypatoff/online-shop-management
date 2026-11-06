@@ -15,6 +15,8 @@ type saleDTO struct {
 	ProductName string `json:"product_name"`
 	Quantity    int64  `json:"quantity"`
 	UnitPrice   int64  `json:"unit_price"`
+	Cups        int64  `json:"cups"`
+	CupPrice    int64  `json:"cup_price"`
 	Total       int64  `json:"total"`
 	CreatedAt   int64  `json:"created_at"`
 	Voided      bool   `json:"voided"`
@@ -23,7 +25,7 @@ type saleDTO struct {
 func toSaleDTO(s store.Sale) saleDTO {
 	return saleDTO{
 		ID: s.ID, ProductID: s.ProductID, ProductName: s.ProductName,
-		Quantity: s.Quantity, UnitPrice: s.UnitPrice, Total: s.Total,
+		Quantity: s.Quantity, UnitPrice: s.UnitPrice, Cups: s.Cups, CupPrice: s.CupPrice, Total: s.Total,
 		CreatedAt: s.CreatedAt, Voided: s.Voided(),
 	}
 }
@@ -31,6 +33,7 @@ func toSaleDTO(s store.Sale) saleDTO {
 type createSaleRequest struct {
 	ProductID int64 `json:"product_id"`
 	Quantity  int64 `json:"quantity"`
+	Cups      int64 `json:"cups"` // optional; charged at the current cup price
 }
 
 func (a *API) handleCreateSale(w http.ResponseWriter, r *http.Request) {
@@ -43,8 +46,12 @@ func (a *API) handleCreateSale(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := validateCups(req.Cups); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
-	sale, newStock, err := a.store.CreateSale(req.ProductID, req.Quantity)
+	sale, newStock, err := a.store.CreateSale(req.ProductID, req.Quantity, req.Cups)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "product not found")
@@ -108,4 +115,34 @@ func (a *API) handleListSales(w http.ResponseWriter, r *http.Request) {
 		dtos = append(dtos, toSaleDTO(s))
 	}
 	writeJSON(w, http.StatusOK, dtos)
+}
+
+// handleGetCupPrice returns what one cup costs when sold with a drink (0 if unset).
+func (a *API) handleGetCupPrice(w http.ResponseWriter, r *http.Request) {
+	price, err := a.store.CupPrice()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read the cup price")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"price": price})
+}
+
+// handleSetCupPrice changes the cup price for sales made from now on.
+func (a *API) handleSetCupPrice(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Price int64 `json:"price"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := validatePrice(req.Price); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := a.store.SetCupPrice(req.Price); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save the cup price")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"price": req.Price})
 }

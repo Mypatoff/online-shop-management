@@ -31,7 +31,7 @@ func TestSaleLowersStock(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 10, 5)
 
-	_, newStock, err := s.CreateSale(p.ID, 3)
+	_, newStock, err := s.CreateSale(p.ID, 3, 0)
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestOversellRejectedAndUnchanged(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 5, 5)
 
-	if _, _, err := s.CreateSale(p.ID, 6); err != ErrInsufficientStock {
+	if _, _, err := s.CreateSale(p.ID, 6, 0); err != ErrInsufficientStock {
 		t.Fatalf("err = %v, want ErrInsufficientStock", err)
 	}
 	got, err := s.GetProduct(p.ID)
@@ -76,7 +76,7 @@ func TestArchivedProductCantBeSold(t *testing.T) {
 	if err := s.SetArchived(p.ID, true); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
-	if _, _, err := s.CreateSale(p.ID, 1); err != ErrArchived {
+	if _, _, err := s.CreateSale(p.ID, 1, 0); err != ErrArchived {
 		t.Fatalf("err = %v, want ErrArchived", err)
 	}
 }
@@ -85,7 +85,7 @@ func TestLaterPriceEditDoesNotChangeOldSales(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 10, 5)
 
-	sale, _, err := s.CreateSale(p.ID, 1)
+	sale, _, err := s.CreateSale(p.ID, 1, 0)
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestVoidRestoresStockAndCantRepeat(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 10, 5)
 
-	sale, newStock, err := s.CreateSale(p.ID, 4)
+	sale, newStock, err := s.CreateSale(p.ID, 4, 0)
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestParallelSellsOnStockOneGiveExactlyOneSuccess(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, _, err := s.CreateSale(p.ID, 1)
+			_, _, err := s.CreateSale(p.ID, 1, 0)
 			results[i] = err
 		}(i)
 	}

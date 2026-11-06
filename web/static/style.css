@@ -953,3 +953,26 @@ select {
 .backup-list .empty {
 	padding: 0.7rem;
 }
+
+/* ---- cups (stakan) on the sell page ---- */
+
+.cups-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.25rem 0.75rem;
+	margin-bottom: 0.25rem;
+}
+
+.cups-row .stepper {
+	margin-bottom: 0;
+}
+
+.cups-label {
+	font-weight: 600;
+}
+
+.cups-price {
+	color: var(--muted);
+	font-size: 0.9rem;
+}

@@ -13,7 +13,9 @@ type Sale struct {
 	ProductName string
 	Quantity    int64
 	UnitPrice   int64
-	Total       int64
+	Cups        int64 // cups (stakan) sold with the product; priced at CupPrice each
+	CupPrice    int64 // what one cup cost when this sale was made
+	Total       int64 // Quantity*UnitPrice + Cups*CupPrice
 	CreatedAt   int64
 	VoidedAt    *int64
 }
@@ -22,12 +24,12 @@ func (s Sale) Voided() bool {
 	return s.VoidedAt != nil
 }
 
-const saleColumns = `id, product_id, product_name, quantity, unit_price, total, created_at, voided_at`
+const saleColumns = `id, product_id, product_name, quantity, unit_price, cups, cup_price, total, created_at, voided_at`
 
 func scanSale(row interface{ Scan(...any) error }) (Sale, error) {
 	var sale Sale
 	var voidedAt sql.NullInt64
-	if err := row.Scan(&sale.ID, &sale.ProductID, &sale.ProductName, &sale.Quantity, &sale.UnitPrice, &sale.Total, &sale.CreatedAt, &voidedAt); err != nil {
+	if err := row.Scan(&sale.ID, &sale.ProductID, &sale.ProductName, &sale.Quantity, &sale.UnitPrice, &sale.Cups, &sale.CupPrice, &sale.Total, &sale.CreatedAt, &voidedAt); err != nil {
 		return Sale{}, err
 	}
 	if voidedAt.Valid {
@@ -36,11 +38,11 @@ func scanSale(row interface{ Scan(...any) error }) (Sale, error) {
 	return sale, nil
 }
 
-// CreateSale sells quantity units of productID: it checks the product
-// exists and isn't archived, checks there's enough stock, decrements
-// stock, and records the sale with a price snapshot — all in one
-// transaction.
-func (s *Store) CreateSale(productID, quantity int64) (Sale, int64, error) {
+// CreateSale sells quantity units of productID, plus cups cups at the current cup price: it
+// checks the product exists and isn't archived, checks there's enough stock, decrements
+// stock, and records the sale with a price snapshot (the product's and the cup's) — all in
+// one transaction. Cups have no stock; they only add to the total.
+func (s *Store) CreateSale(productID, quantity, cups int64) (Sale, int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Sale{}, 0, fmt.Errorf("create sale: begin: %w", err)
@@ -64,16 +66,25 @@ func (s *Store) CreateSale(productID, quantity int64) (Sale, int64, error) {
 		return Sale{}, 0, ErrInsufficientStock
 	}
 
+	var cupPrice int64
+	if cups > 0 {
+		cupPrice, err = cupPriceIn(tx)
+		if err != nil {
+			return Sale{}, 0, fmt.Errorf("create sale: %w", err)
+		}
+	}
+
 	newStock := stock - quantity
 	t := now()
 	if _, err := tx.Exec(`UPDATE products SET stock = ?, updated_at = ? WHERE id = ?`, newStock, t, productID); err != nil {
 		return Sale{}, 0, fmt.Errorf("create sale: update stock: %w", err)
 	}
 
-	total := price * quantity
+	total := price*quantity + cups*cupPrice
 	res, err := tx.Exec(
-		`INSERT INTO sales (product_id, product_name, quantity, unit_price, total, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		productID, name, quantity, price, total, t,
+		`INSERT INTO sales (product_id, product_name, quantity, unit_price, cups, cup_price, total, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		productID, name, quantity, price, cups, cupPrice, total, t,
 	)
 	if err != nil {
 		return Sale{}, 0, fmt.Errorf("create sale: insert: %w", err)
@@ -91,7 +102,7 @@ func (s *Store) CreateSale(productID, quantity int64) (Sale, int64, error) {
 		return Sale{}, 0, fmt.Errorf("create sale: commit: %w", err)
 	}
 
-	sale := Sale{ID: saleID, ProductID: productID, ProductName: name, Quantity: quantity, UnitPrice: price, Total: total, CreatedAt: t}
+	sale := Sale{ID: saleID, ProductID: productID, ProductName: name, Quantity: quantity, UnitPrice: price, Cups: cups, CupPrice: cupPrice, Total: total, CreatedAt: t}
 	return sale, newStock, nil
 }
 

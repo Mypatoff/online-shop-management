@@ -38,7 +38,7 @@ func TestSaleWritesOneMovement(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 10, 5)
 
-	sale, newStock, err := s.CreateSale(p.ID, 3)
+	sale, newStock, err := s.CreateSale(p.ID, 3, 0)
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestVoidWritesOneMovement(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 10, 5)
 
-	sale, _, err := s.CreateSale(p.ID, 4)
+	sale, _, err := s.CreateSale(p.ID, 4, 0)
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestFailedOversellWritesNoMovement(t *testing.T) {
 	s := newTestStore(t)
 	p := mustCreateProduct(t, s, "Cola", "", 150, 5, 5)
 
-	if _, _, err := s.CreateSale(p.ID, 6); err != ErrInsufficientStock {
+	if _, _, err := s.CreateSale(p.ID, 6, 0); err != ErrInsufficientStock {
 		t.Fatalf("err = %v, want ErrInsufficientStock", err)
 	}
 
@@ -136,11 +136,11 @@ func TestSumOfMovementDeltasMatchesCurrentStock(t *testing.T) {
 	p1 := mustCreateProduct(t, s, "Cola", "", 150, 10, 5)
 	p2 := mustCreateProduct(t, s, "Chips", "", 300, 0, 5)
 
-	sale1, _, err := s.CreateSale(p1.ID, 3)
+	sale1, _, err := s.CreateSale(p1.ID, 3, 0)
 	if err != nil {
 		t.Fatalf("create sale 1: %v", err)
 	}
-	if _, _, err := s.CreateSale(p1.ID, 2); err != nil {
+	if _, _, err := s.CreateSale(p1.ID, 2, 0); err != nil {
 		t.Fatalf("create sale 2: %v", err)
 	}
 	if err := s.VoidSale(sale1.ID); err != nil {
@@ -153,7 +153,7 @@ func TestSumOfMovementDeltasMatchesCurrentStock(t *testing.T) {
 		t.Fatalf("adjust p2: %v", err)
 	}
 	// A rejected oversell shouldn't disturb the running total either.
-	if _, _, err := s.CreateSale(p2.ID, 1000); err != ErrInsufficientStock {
+	if _, _, err := s.CreateSale(p2.ID, 1000, 0); err != ErrInsufficientStock {
 		t.Fatalf("err = %v, want ErrInsufficientStock", err)
 	}
 

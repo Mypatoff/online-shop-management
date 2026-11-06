@@ -31,7 +31,7 @@ func doDailyRequest(t *testing.T, a *API, query string) (*http.Response, dailySa
 
 func mustSell(t *testing.T, a *API, productID, quantity int64) {
 	t.Helper()
-	if _, _, err := a.store.CreateSale(productID, quantity); err != nil {
+	if _, _, err := a.store.CreateSale(productID, quantity, 0); err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestDailySalesVoidedExcludedFromTotalsButListed(t *testing.T) {
 	}
 
 	mustSell(t, a, p.ID, 2)
-	sale, _, err := a.store.CreateSale(p.ID, 3)
+	sale, _, err := a.store.CreateSale(p.ID, 3, 0)
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
 	}

@@ -420,8 +420,8 @@ func TestMigrateV3ToV4AddsIndexesBacksUpAndKeepsData(t *testing.T) {
 	if err := conn.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 4 {
-		t.Fatalf("user_version = %d, want 4", version)
+	if version != currentVersion {
+		t.Fatalf("user_version = %d, want %d", version, currentVersion)
 	}
 
 	got := indexNames(t, conn)
@@ -500,5 +500,107 @@ func TestOpenRefusesNewerSchema(t *testing.T) {
 	if conn, err := Open(dbPath, filepath.Join(dir, "backups")); err == nil {
 		conn.Close()
 		t.Fatal("Open succeeded on a database from a newer version, want an error")
+	}
+}
+
+func columnNames(t *testing.T, conn *sql.DB, table string) map[string]bool {
+	t.Helper()
+	rows, err := conn.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		cols[n] = true
+	}
+	return cols
+}
+
+func TestMigrateV4ToV5AddsCupsKeepsSalesAndBacksUp(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shop.db")
+	backupDir := filepath.Join(dir, "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A real v4 database: the v3 fixture taken through the v3 -> v4 step.
+	makeV3SchemaDB(t, dbPath)
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateV3ToV4(raw); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+
+	conn, err := Open(dbPath, backupDir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer conn.Close()
+
+	var version int
+	if err := conn.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
+		t.Fatalf("user_version = %d (err %v), want 5", version, err)
+	}
+	cols := columnNames(t, conn, "sales")
+	if !cols["cups"] || !cols["cup_price"] {
+		t.Fatalf("sales columns = %v, want cups and cup_price", cols)
+	}
+	var total, cups, cupPrice int64
+	if err := conn.QueryRow(`SELECT total, cups, cup_price FROM sales WHERE id = 1`).Scan(&total, &cups, &cupPrice); err != nil {
+		t.Fatal(err)
+	}
+	if total != 150 || cups != 0 || cupPrice != 0 {
+		t.Fatalf("existing sale = total %d cups %d cup_price %d, want 150, 0, 0", total, cups, cupPrice)
+	}
+	if _, err := conn.Exec(`INSERT INTO settings (key, value) VALUES ('cup_price', '500')`); err != nil {
+		t.Fatalf("settings table missing: %v", err)
+	}
+	if entries, _ := os.ReadDir(backupDir); len(entries) != 1 {
+		t.Fatalf("backups = %v, want exactly one pre-migration backup", entries)
+	}
+}
+
+func TestNewDatabaseHasCupsAndSettings(t *testing.T) {
+	dir := t.TempDir()
+	conn, err := Open(filepath.Join(dir, "shop.db"), filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	cols := columnNames(t, conn, "sales")
+	if !cols["cups"] || !cols["cup_price"] {
+		t.Fatalf("sales columns on a new database = %v", cols)
+	}
+	if _, err := conn.Exec(`INSERT INTO settings (key, value) VALUES ('cup_price', '1')`); err != nil {
+		t.Fatalf("settings table missing on a new database: %v", err)
+	}
+}
+
+func TestMigrateV4ToV5FailureLeavesNothingHalfDone(t *testing.T) {
+	dir := t.TempDir()
+	conn, err := Open(filepath.Join(dir, "shop.db"), filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// Already at v5, so a second run must fail (duplicate column) ...
+	if err := migrateV4ToV5(conn); err == nil {
+		t.Fatal("running the step twice should fail, not silently succeed")
+	}
+	// ... and leave the database exactly as it was.
+	var version int
+	if err := conn.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
+		t.Fatalf("user_version = %d (err %v), want 5", version, err)
+	}
+	if n := len(columnNames(t, conn, "sales")); n != 10 { // 8 original + cups + cup_price
+		t.Fatalf("sales has %d columns, want 10", n)
 	}
 }

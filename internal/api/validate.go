@@ -33,6 +33,7 @@ const (
 	maxStock           = 1_000_000
 	maxThreshold       = 1_000_000
 	maxQuantity        = 100_000
+	maxCups            = 1_000
 	maxBilliardAmount  = 100_000_000_000
 	maxBilliardMinutes = 1440
 	maxTableNameLength = 30
@@ -44,6 +45,9 @@ func validateThreshold(v int64) error {
 	return validateRange("low_stock_threshold", v, 0, maxThreshold)
 }
 func validateQuantity(v int64) error { return validateRange("quantity", v, 1, maxQuantity) }
+
+// validateCups allows 0: most sales have no cup.
+func validateCups(v int64) error { return validateRange("cups", v, 0, maxCups) }
 
 func validateBilliardAmount(v int64) error {
 	return validateRange("amount", v, 1, maxBilliardAmount)

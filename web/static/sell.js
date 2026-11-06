@@ -9,6 +9,10 @@ var selectedPanel = document.getElementById("sell-selected");
 var selectedNameEl = document.getElementById("selected-name");
 var selectedPriceEl = document.getElementById("selected-price");
 var qtyInput = document.getElementById("qty-input");
+var cupsInput = document.getElementById("cups-input");
+var cupsPriceEl = document.getElementById("cups-price");
+var cupPrice = 0; // what one cup (stakan) costs, set with the "Set price" button
+var MAX_CUPS = 1000;
 var totalEl = document.getElementById("sell-total");
 var sellBtn = document.getElementById("sell-btn");
 var sellErrorEl = document.getElementById("sell-error");
@@ -16,6 +20,7 @@ var sellErrorEl = document.getElementById("sell-error");
 window.configReady.then(function () {
 	loadProducts();
 	loadRecentSales();
+	loadCupPrice();
 });
 
 searchInput.addEventListener("input", function () {
@@ -32,19 +37,36 @@ qtyInput.addEventListener("input", function () {
 	setQuantity(currentQuantity());
 });
 
+document.getElementById("cups-dec").onclick = function () {
+	setCups(currentCups() - 1);
+};
+document.getElementById("cups-inc").onclick = function () {
+	setCups(currentCups() + 1);
+};
+cupsInput.addEventListener("input", function () {
+	setCups(currentCups());
+});
+document.getElementById("cup-price-btn").onclick = openCupPriceModal;
+
 sellBtn.onclick = function () {
 	if (!selected) return;
 	var quantity = currentQuantity();
+	var cups = currentCups();
 	var productID = selected.id;
 	sellErrorEl.textContent = "";
 	sellBtn.disabled = true;
 
 	apiFetch("/api/sales", {
 		method: "POST",
-		body: JSON.stringify({ product_id: selected.id, quantity: quantity }),
+		body: JSON.stringify({ product_id: selected.id, quantity: quantity, cups: cups }),
 	})
 		.then(function (res) {
-			showToast(t("sell.sold", { qty: quantity, name: selected.name, left: res.stock }));
+			showToast(
+				cups > 0
+					? t("sell.sold_cups", { qty: quantity, name: selected.name, cups: cups, left: res.stock })
+					: t("sell.sold", { qty: quantity, name: selected.name, left: res.stock })
+			);
+			setCups(0); // cups belong to one sale; the next starts at none
 			updateProductStock(selected.id, res.stock);
 			selectProduct(selected);
 			loadRecentSales();
@@ -100,6 +122,8 @@ function renderResults(query) {
 }
 
 function selectProduct(p) {
+	// Cups belong to the sale being built: picking a different product starts over.
+	if (!selected || selected.id !== p.id) cupsInput.value = 0;
 	// Use the freshest copy in allProducts (stock may have just changed).
 	selected = allProducts.find(function (item) {
 		return item.id === p.id;
@@ -130,12 +154,68 @@ function setQuantity(n) {
 	updateTotal();
 }
 
+function currentCups() {
+	var n = parseInt(cupsInput.value, 10);
+	if (isNaN(n) || n < 0) return 0;
+	return Math.min(n, MAX_CUPS);
+}
+
+function setCups(n) {
+	n = Math.min(Math.max(n, 0), MAX_CUPS);
+	cupsInput.value = n;
+	updateTotal();
+}
+
+// The total is what the customer pays: the product(s) plus any cups.
 function updateTotal() {
 	if (!selected) {
 		totalEl.textContent = "—";
 		return;
 	}
-	totalEl.textContent = formatMoney(selected.price * currentQuantity());
+	totalEl.textContent = formatMoney(selected.price * currentQuantity() + cupPrice * currentCups());
+}
+
+function loadCupPrice() {
+	return apiFetch("/api/cup-price")
+		.then(function (res) {
+			cupPrice = res.price;
+			showCupPrice();
+			updateTotal();
+		})
+		.catch(function () {});
+}
+
+function showCupPrice() {
+	cupsPriceEl.textContent = cupPrice > 0 ? t("sell.each", { v: formatMoney(cupPrice) }) : t("sell.cup_free");
+}
+
+// priceForInput shows a stored price in an input without the currency label.
+function priceForInput(amount) {
+	var cfg = window.appConfig || { currency: "" };
+	var text = formatMoney(amount);
+	return cfg.currency ? text.slice(0, text.length - cfg.currency.length - 1) : text;
+}
+
+function openCupPriceModal() {
+	openModal({
+		title: t("sell.cup_price_title"),
+		submitLabel: t("common.save"),
+		fields: [{ name: "price", label: t("sell.cup_price_label"), value: priceForInput(cupPrice), autofocus: true }],
+		onSubmit: function (values) {
+			var price;
+			try {
+				price = parseMoney(values.price);
+			} catch (err) {
+				throw fieldError("price", err.message);
+			}
+			if (price < 0 || price > 100000000000) throw fieldError("price", t("products.err_price"));
+			return apiFetch("/api/cup-price", { method: "PUT", body: JSON.stringify({ price: price }) }).then(function (res) {
+				cupPrice = res.price;
+				showCupPrice();
+				updateTotal();
+			});
+		},
+	});
 }
 
 function updateProductStock(id, newStock) {
@@ -164,7 +244,15 @@ function renderRecentSales(sales) {
 		var li = document.createElement("li");
 		li.className = "recent-sale-row" + (sale.voided ? " voided-row" : "");
 		li.textContent =
-			formatLocalTime(sale.created_at) + " — " + sale.quantity + " x " + sale.product_name + " — " + formatMoney(sale.total) + (sale.voided ? " (" + t("common.voided_lower") + ")" : "");
+			formatLocalTime(sale.created_at) +
+			" — " +
+			sale.quantity +
+			" x " +
+			sale.product_name +
+			(sale.cups > 0 ? " + " + t("sell.recent_cups", { n: sale.cups }) : "") +
+			" — " +
+			formatMoney(sale.total) +
+			(sale.voided ? " (" + t("common.voided_lower") + ")" : "");
 		list.appendChild(li);
 	});
 }

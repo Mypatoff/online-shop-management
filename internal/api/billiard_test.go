@@ -200,7 +200,7 @@ func TestSummaryIncludesBilliardAndTotalRevenue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create product: %v", err)
 	}
-	if _, _, err := a.store.CreateSale(p.ID, 2); err != nil { // 300
+	if _, _, err := a.store.CreateSale(p.ID, 2, 0); err != nil { // 300
 		t.Fatalf("create sale: %v", err)
 	}
 	if _, err := a.store.CreateBilliardEntry(1000, "Table 1", nil, ""); err != nil {

@@ -54,6 +54,9 @@ func (a *API) Routes(port int) http.Handler {
 	mux.HandleFunc("POST /api/products/{id}/archive", a.handleSetArchived(true))
 	mux.HandleFunc("POST /api/products/{id}/unarchive", a.handleSetArchived(false))
 
+	mux.HandleFunc("GET /api/cup-price", a.handleGetCupPrice)
+	mux.HandleFunc("PUT /api/cup-price", a.handleSetCupPrice)
+
 	mux.HandleFunc("GET /api/sales", a.handleListSales)
 	mux.HandleFunc("POST /api/sales", a.handleCreateSale)
 	mux.HandleFunc("POST /api/sales/{id}/void", a.handleVoidSale)

@@ -18,6 +18,17 @@
 			<button type="button" id="qty-inc" class="btn btn-secondary btn-small" aria-label="{{t "sell.qty_inc"}}">+</button>
 		</div>
 
+		<div class="cups-row">
+			<span class="cups-label">{{t "sell.cups"}}</span>
+			<div class="stepper">
+				<button type="button" id="cups-dec" class="btn btn-secondary btn-small" aria-label="{{t "sell.cups_dec"}}">−</button>
+				<input type="number" id="cups-input" value="0" min="0" max="1000" step="1" aria-label="{{t "sell.cups"}}">
+				<button type="button" id="cups-inc" class="btn btn-secondary btn-small" aria-label="{{t "sell.cups_inc"}}">+</button>
+			</div>
+			<span class="cups-price" id="cups-price"></span>
+			<button type="button" id="cup-price-btn" class="btn btn-ghost btn-small">{{t "sell.cup_price_set"}}</button>
+		</div>
+
 		<p class="sell-total">{{t "sell.total"}} <span id="sell-total">—</span></p>
 
 		<button type="button" id="sell-btn" class="btn btn-sell">{{t "sell.sell"}}</button>

@@ -47,8 +47,8 @@ function loadDay(dateStr) {
 
 	apiFetch("/api/sales/daily?date=" + encodeURIComponent(dateStr)).then(function (data) {
 		currentData = data;
-		renderTotals(data.totals, data.billiard);
-		renderByProduct(data.by_product);
+		renderTotals(data.totals, data.billiard, data.cups);
+		renderByProduct(data.by_product, data.cups);
 		renderSales(data.sales);
 		renderBilliardDay(data.billiard);
 	});
@@ -83,10 +83,11 @@ function formatTimeOfDay(unixSeconds) {
 	return h + ":" + m;
 }
 
-function renderTotals(totals, billiard) {
+function renderTotals(totals, billiard, cups) {
 	document.getElementById("day-revenue").textContent = formatMoney(totals.revenue);
 	document.getElementById("day-units").textContent = totals.units;
 	document.getElementById("day-count").textContent = totals.sale_count;
+	document.getElementById("day-cups").textContent = cups.count;
 	document.getElementById("day-billiard-revenue").textContent = formatMoney(billiard.revenue);
 	document.getElementById("day-total-revenue-line").textContent = t("sales.total_line", {
 		total: formatMoney(totals.total_revenue),
@@ -123,7 +124,7 @@ function renderBilliardDay(billiard) {
 	});
 }
 
-function renderByProduct(items) {
+function renderByProduct(items, cups) {
 	var tbody = document.getElementById("by-product-tbody");
 	var empty = document.getElementById("by-product-empty");
 	var wrap = document.getElementById("by-product-wrap");
@@ -144,6 +145,15 @@ function renderByProduct(items) {
 		addCell(tr, formatMoney(item.revenue));
 		tbody.appendChild(tr);
 	});
+	// Cups are sold with the products but belong to none of them: their own row, so the
+	// column still adds up to the day's revenue.
+	if (cups && cups.count > 0) {
+		var cupsRow = document.createElement("tr");
+		addCell(cupsRow, t("sales.col_cups"));
+		addCell(cupsRow, cups.count);
+		addCell(cupsRow, formatMoney(cups.revenue));
+		tbody.appendChild(cupsRow);
+	}
 }
 
 function renderSales(sales) {
@@ -172,6 +182,7 @@ function buildSaleRow(sale) {
 	addCell(tr, formatTimeOfDay(sale.created_at));
 	addCell(tr, sale.product_name);
 	addCell(tr, sale.quantity);
+	addCell(tr, sale.cups > 0 ? sale.cups : "—");
 	addCell(tr, formatMoney(sale.unit_price));
 	addCell(tr, formatMoney(sale.total));
 	addCell(tr, sale.voided ? t("common.voided") : t("common.completed"));
@@ -233,6 +244,9 @@ function buildDailyReport(data) {
 	appendListItem(totalsList, t("report.revenue", { v: formatMoney(data.totals.revenue) }));
 	appendListItem(totalsList, t("report.units_sold", { v: data.totals.units }));
 	appendListItem(totalsList, t("report.sales", { v: data.totals.sale_count }));
+	if (data.cups && data.cups.count > 0) {
+		appendListItem(totalsList, t("report.cups", { n: data.cups.count, v: formatMoney(data.cups.revenue) }));
+	}
 	appendListItem(totalsList, t("report.billiard_revenue", { v: formatMoney(data.billiard.revenue) }));
 	appendListItem(totalsList, t("report.total_revenue", { v: formatMoney(data.totals.total_revenue) }));
 	container.appendChild(totalsList);
@@ -251,21 +265,24 @@ function buildDailyReport(data) {
 	container.appendChild(
 		buildReportTable(
 			[t("sales.col_product"), t("sales.col_units"), t("sales.col_revenue")],
-			data.by_product.map(function (item) {
-				return [item.name, String(item.units), formatMoney(item.revenue)];
-			})
+			data.by_product
+				.map(function (item) {
+					return [item.name, String(item.units), formatMoney(item.revenue)];
+				})
+				.concat(data.cups && data.cups.count > 0 ? [[t("sales.col_cups"), String(data.cups.count), formatMoney(data.cups.revenue)]] : [])
 		)
 	);
 
 	appendHeading(container, "h2", t("sales.sales"));
 	container.appendChild(
 		buildReportTable(
-			[t("common.time"), t("sales.col_product"), t("sales.col_qty"), t("sales.col_unit_price"), t("sales.col_total"), t("common.status")],
+			[t("common.time"), t("sales.col_product"), t("sales.col_qty"), t("sales.col_cups"), t("sales.col_unit_price"), t("sales.col_total"), t("common.status")],
 			data.sales.map(function (sale) {
 				return [
 					formatTimeOfDay(sale.created_at),
 					sale.product_name,
 					String(sale.quantity),
+					sale.cups > 0 ? String(sale.cups) : "—",
 					formatMoney(sale.unit_price),
 					formatMoney(sale.total),
 					sale.voided ? t("common.voided") : t("common.completed"),
@@ -355,6 +372,9 @@ function printReceipt(sale) {
 	appendParagraph(container, sale.product_name);
 	appendParagraph(container, t("receipt.qty", { v: sale.quantity }));
 	appendParagraph(container, t("receipt.unit_price", { v: formatMoney(sale.unit_price) }));
+	if (sale.cups > 0) {
+		appendParagraph(container, t("receipt.cups", { n: sale.cups, price: formatMoney(sale.cup_price), v: formatMoney(sale.cups * sale.cup_price) }));
+	}
 	appendParagraph(container, t("receipt.total", { v: formatMoney(sale.total) }));
 	appendParagraph(container, t("receipt.thanks"));
 

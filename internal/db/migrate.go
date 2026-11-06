@@ -16,7 +16,8 @@ import (
 //	2  stock_movements, backfilled with one 'initial' row per product
 //	3  billiard_entries
 //	4  indexes for the date-range, sale and stock-movement queries
-const currentVersion = 4
+//	5  cups sold with a sale (cups, cup_price) and a settings table (the cup price)
+const currentVersion = 5
 
 // CurrentVersion is the schema version this build reads and writes. A
 // database with a higher user_version was written by a newer ShopKeeper.
@@ -94,7 +95,7 @@ func migrate(conn *sql.DB, backupDir string, hadTablesBefore bool) error {
 			if err := createV4Indexes(conn); err != nil {
 				return err
 			}
-			return setUserVersion(conn, currentVersion)
+			return migrateV4ToV5(conn) // also records the version
 		}
 		version = 1
 	}
@@ -126,6 +127,13 @@ func migrate(conn *sql.DB, backupDir string, hadTablesBefore bool) error {
 			return err
 		}
 		version = 4
+	}
+
+	if version == 4 {
+		if err := migrateV4ToV5(conn); err != nil {
+			return err
+		}
+		version = 5
 	}
 
 	if version != currentVersion {
@@ -243,6 +251,38 @@ func migrateV3ToV4(conn *sql.DB) error {
 		return err
 	}
 	if err := setUserVersion(tx, 4); err != nil {
+		return fmt.Errorf("set user_version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+// migrateV4ToV5 adds cups to sales and the settings table. A sale's cups and the price a cup
+// had at that moment are stored on the sale, like a product's price snapshot, so changing the
+// cup price later never rewrites history. Existing sales get 0 cups. SQLite cannot add a column
+// twice, so the whole step is one transaction: it either happens completely or not at all.
+func migrateV4ToV5(conn *sql.DB) error {
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op if committed
+
+	for _, stmt := range []string{
+		`ALTER TABLE sales ADD COLUMN cups INTEGER NOT NULL DEFAULT 0 CHECK (cups >= 0)`,
+		`ALTER TABLE sales ADD COLUMN cup_price INTEGER NOT NULL DEFAULT 0 CHECK (cup_price >= 0)`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		)`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("v5 step %.40q: %w", stmt, err)
+		}
+	}
+	if err := setUserVersion(tx, 5); err != nil {
 		return fmt.Errorf("set user_version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

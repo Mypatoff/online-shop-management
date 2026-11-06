@@ -20,11 +20,19 @@ type dailyProductDTO struct {
 	Revenue int64  `json:"revenue"`
 }
 
+// cupsDailyDTO is the day's cups (stakan) sold with products: how many, and what they brought
+// in. That money is part of totals.revenue but not of any product's revenue.
+type cupsDailyDTO struct {
+	Count   int64 `json:"count"`
+	Revenue int64 `json:"revenue"`
+}
+
 type dailySalesDTO struct {
 	Date      string               `json:"date"`
 	Sales     []saleDTO            `json:"sales"`
 	Totals    dailyTotalsDTO       `json:"totals"`
 	ByProduct []dailyProductDTO    `json:"by_product"`
+	Cups      cupsDailyDTO         `json:"cups"`
 	Billiard  billiardDailyPartDTO `json:"billiard"`
 }
 
@@ -95,7 +103,9 @@ func (a *API) handleDailySales(w http.ResponseWriter, r *http.Request) {
 			order = append(order, sale.ProductName)
 		}
 		entry.Units += sale.Quantity
-		entry.Revenue += sale.Total
+		entry.Revenue += sale.Quantity * sale.UnitPrice // the product's share; cups are counted apart
+		resp.Cups.Count += sale.Cups
+		resp.Cups.Revenue += sale.Cups * sale.CupPrice
 	}
 
 	for _, name := range order {
