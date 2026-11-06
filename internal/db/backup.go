@@ -69,18 +69,21 @@ func Backup(db *sql.DB, destPath string) error {
 		return fmt.Errorf("backup: database failed quick_check: %s", result)
 	}
 
-	dir := filepath.Dir(destPath)
-	tmp, err := os.CreateTemp(dir, "shop-backup-*.db.tmp")
+	// VACUUM INTO needs a path that does not exist yet. Reserving a name
+	// with CreateTemp and deleting it would leave a window in which another
+	// process could take that name, so the snapshot goes into a directory
+	// created for this call alone (MkdirTemp is atomic), next to destPath so
+	// the final rename stays on one filesystem.
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		return fmt.Errorf("backup: create folder: %w", err)
+	}
+	tmpDir, err := os.MkdirTemp(filepath.Dir(destPath), "shop-backup-*.tmp")
 	if err != nil {
-		return fmt.Errorf("backup: create temp file: %w", err)
+		return fmt.Errorf("backup: create temp dir: %w", err)
 	}
-	tmpPath := tmp.Name()
-	tmp.Close()
-	if err := os.Remove(tmpPath); err != nil {
-		return fmt.Errorf("backup: remove placeholder: %w", err)
-	}
-	defer os.Remove(tmpPath) //nolint:errcheck // best effort cleanup once renamed away
+	defer os.RemoveAll(tmpDir) //nolint:errcheck // best effort cleanup once renamed away
 
+	tmpPath := filepath.Join(tmpDir, "snapshot.db")
 	if _, err := db.Exec(`VACUUM INTO ?`, tmpPath); err != nil {
 		return fmt.Errorf("backup: vacuum into: %w", err)
 	}

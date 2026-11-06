@@ -47,16 +47,21 @@ func protect(hosts map[string]bool) func(http.Handler) http.Handler {
 }
 
 // requireJSON rejects POST/PUT requests that don't declare a JSON
-// body, and caps every request body's size.
+// body, and caps every request body's size. The one exception is the
+// backup upload, which carries a raw database file (see restoreUploadPath).
 func requireJSON(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		want, limit := "application/json", int64(maxBodyBytes)
+		if r.URL.Path == restoreUploadPath {
+			want, limit = "application/octet-stream", maxUploadBytes
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 
 		if r.Method == http.MethodPost || r.Method == http.MethodPut {
 			ct := r.Header.Get("Content-Type")
 			mediaType, _, err := mime.ParseMediaType(ct)
-			if err != nil || mediaType != "application/json" {
-				writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			if err != nil || mediaType != want {
+				writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be "+want)
 				return
 			}
 		}

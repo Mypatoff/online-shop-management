@@ -1,30 +1,30 @@
 {{define "content"}}
 <div class="page-header">
-	<h1>Products</h1>
-	<button type="button" id="add-product-btn" class="btn btn-primary">Add product</button>
+	<h1>{{t "products.title"}}</h1>
+	<button type="button" id="add-product-btn" class="btn btn-primary">{{t "products.add"}}</button>
 </div>
 
 <div class="toolbar">
-	<input type="search" id="search-input" placeholder="Search by name or SKU" aria-label="Search products">
+	<input type="search" id="search-input" placeholder="{{t "products.search_placeholder"}}" aria-label="{{t "products.search_label"}}">
 	<label class="checkbox">
 		<input type="checkbox" id="show-archived-input">
-		Show archived
+		{{t "products.show_archived"}}
 	</label>
 </div>
 
 <p id="products-empty" class="empty hidden">
-	<span id="products-empty-message">No products yet.</span>
-	<button type="button" id="add-product-btn-empty" class="btn btn-primary">Add your first product</button>
+	<span id="products-empty-message">{{t "products.empty"}}</span>
+	<button type="button" id="add-product-btn-empty" class="btn btn-primary">{{t "products.add_first"}}</button>
 </p>
 
 <div class="table-scroll">
 	<table class="data-table" id="products-table">
 		<thead>
 			<tr>
-				<th>Name</th>
-				<th>SKU</th>
-				<th>Price</th>
-				<th>Stock</th>
+				<th>{{t "products.col_name"}}</th>
+				<th>{{t "products.col_sku"}}</th>
+				<th>{{t "products.col_price"}}</th>
+				<th>{{t "products.col_stock"}}</th>
 				<th></th>
 			</tr>
 		</thead>

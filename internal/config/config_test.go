@@ -41,3 +41,32 @@ func TestLoadDecimalsOutOfRangeRejected(t *testing.T) {
 		t.Fatal("want error for DECIMALS=4, got nil")
 	}
 }
+
+func TestLoadLang(t *testing.T) {
+	for _, tc := range []struct {
+		name, shopLang, lang, want string
+		wantErr                    bool
+	}{
+		{"default", "", "", "en", false},
+		{"explicit", "uz", "", "uz", false},
+		{"explicit beats LANG", "ru", "uz_UZ.UTF-8", "ru", false},
+		{"LANG locale", "", "uz_UZ.UTF-8", "uz", false},
+		{"LANG with dash", "", "ru-RU", "ru", false},
+		{"LANG unsupported is ignored", "", "de_DE.UTF-8", "en", false},
+		{"LANG C is ignored", "", "C", "en", false},
+		{"typo in SHOP_LANG is an error", "uzbek", "", "", true},
+		{"case does not matter", "RU", "", "ru", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SHOP_LANG", tc.shopLang)
+			t.Setenv("LANG", tc.lang)
+			cfg, err := Load()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if err == nil && cfg.Lang != tc.want {
+				t.Fatalf("Lang = %q, want %q", cfg.Lang, tc.want)
+			}
+		})
+	}
+}

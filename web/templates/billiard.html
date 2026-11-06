@@ -1,68 +1,68 @@
 {{define "content"}}
 <div class="no-print">
-	<h1>Billiard</h1>
+	<h1>{{t "nav.billiard"}}</h1>
 
 	<section class="panel">
-		<h2>New entry</h2>
+		<h2>{{t "billiard.new_entry"}}</h2>
 		<form id="billiard-entry-form">
 			<label class="field">
-				<span>Amount</span>
-				<input type="text" id="billiard-amount-input" class="billiard-amount-input" inputmode="decimal" autocomplete="off" aria-label="Amount">
+				<span>{{t "billiard.amount"}}</span>
+				<input type="text" id="billiard-amount-input" class="billiard-amount-input" inputmode="decimal" autocomplete="off" aria-label="{{t "billiard.amount"}}">
 			</label>
 
 			<label class="field">
-				<span>Table</span>
-				<input type="text" id="billiard-table-input" list="billiard-table-suggestions" autocomplete="off" aria-label="Table">
+				<span>{{t "billiard.table"}}</span>
+				<input type="text" id="billiard-table-input" list="billiard-table-suggestions" autocomplete="off" aria-label="{{t "billiard.table"}}">
 				<datalist id="billiard-table-suggestions"></datalist>
 			</label>
 
 			<label class="field">
-				<span>Minutes (optional)</span>
-				<input type="text" id="billiard-minutes-input" inputmode="numeric" autocomplete="off" aria-label="Minutes">
+				<span>{{t "billiard.minutes_optional"}}</span>
+				<input type="text" id="billiard-minutes-input" inputmode="numeric" autocomplete="off" aria-label="{{t "billiard.minutes"}}">
 			</label>
 
 			<label class="field">
-				<span>Note (optional)</span>
-				<input type="text" id="billiard-note-input" autocomplete="off" aria-label="Note">
+				<span>{{t "common.note_optional"}}</span>
+				<input type="text" id="billiard-note-input" autocomplete="off" aria-label="{{t "common.note"}}">
 			</label>
 
-			<button type="submit" id="billiard-save-btn" class="btn btn-sell">SAVE</button>
+			<button type="submit" id="billiard-save-btn" class="btn btn-sell">{{t "billiard.save"}}</button>
 			<p id="billiard-entry-error" class="error" role="alert"></p>
 		</form>
 	</section>
 
 	<div class="toolbar">
 		<label class="field-inline">
-			<span>Date</span>
+			<span>{{t "common.date"}}</span>
 			<input type="date" id="billiard-date-input">
 		</label>
-		<button type="button" id="billiard-prev-day-btn" class="btn btn-secondary btn-small">◀ Previous</button>
-		<button type="button" id="billiard-next-day-btn" class="btn btn-secondary btn-small">Next ▶</button>
+		<button type="button" id="billiard-prev-day-btn" class="btn btn-secondary btn-small">{{t "common.previous"}}</button>
+		<button type="button" id="billiard-next-day-btn" class="btn btn-secondary btn-small">{{t "common.next"}}</button>
 	</div>
 
 	<section class="stats-grid stats-grid-compact">
 		<div class="stat-card">
-			<div class="stat-label">Revenue</div>
+			<div class="stat-label">{{t "sales.revenue"}}</div>
 			<div class="stat-value" id="billiard-day-revenue">—</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-label">Entries</div>
+			<div class="stat-label">{{t "billiard.entries"}}</div>
 			<div class="stat-value" id="billiard-day-count">—</div>
 		</div>
 	</section>
 
-	<h2>Entries</h2>
-	<p id="billiard-empty" class="empty hidden">No billiard entries on this day.</p>
+	<h2>{{t "billiard.entries"}}</h2>
+	<p id="billiard-empty" class="empty hidden">{{t "billiard.none_today"}}</p>
 	<div class="table-scroll" id="billiard-wrap">
 		<table class="data-table" id="billiard-table">
 			<thead>
 				<tr>
-					<th>Time</th>
-					<th>Table</th>
-					<th>Minutes</th>
-					<th>Note</th>
-					<th>Amount</th>
-					<th>Status</th>
+					<th>{{t "common.time"}}</th>
+					<th>{{t "billiard.col_table"}}</th>
+					<th>{{t "billiard.col_minutes"}}</th>
+					<th>{{t "billiard.col_note"}}</th>
+					<th>{{t "billiard.col_amount"}}</th>
+					<th>{{t "common.status"}}</th>
 					<th></th>
 				</tr>
 			</thead>
@@ -72,5 +72,4 @@
 </div>
 
 <div id="billiard-receipt" class="print-only"></div>
-<div id="toast" class="toast hidden" role="status"></div>
 {{end}}

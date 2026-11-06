@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -27,12 +28,32 @@ import (
 // run and used again in main, after run has closed the database.
 var updater = update.New(update.Version)
 
+// errAlreadyRunning means a second launch found the first one and woke it up.
+var errAlreadyRunning = errors.New("already running")
+
+// restartedEnv marks a process started again by an update or a restore, so on Linux it does
+// not open a second browser tab (the open page reconnects by itself).
+const restartedEnv = "SHOPKEEPER_RESTARTED"
+
+// restoreRestart is set when the app stops only to start again after a restore.
+var restoreRestart atomic.Bool
+
 func main() {
 	err := run()
+	if errors.Is(err, errAlreadyRunning) {
+		return
+	}
 	// An update is installed only now: the server has stopped, the last backup is taken and the
 	// database is closed, so the new program starts from a clean state.
 	if updater.Pending() {
 		finishUpdate()
+	} else if restoreRestart.Load() && err == nil {
+		// The restored database is swapped in by the next start (see db.ApplyPendingRestore).
+		_ = os.Setenv(restartedEnv, "1")
+		if err := updater.Relaunch(); err != nil {
+			reportFatal(fmt.Errorf("the backup is ready to restore but ShopKeeper could not be restarted: %w\n\nStart it again by hand", err))
+			os.Exit(1)
+		}
 	}
 	if err != nil {
 		reportFatal(err)
@@ -48,6 +69,7 @@ func finishUpdate() {
 	} else {
 		log.Printf("updated to the new version")
 	}
+	_ = os.Setenv(restartedEnv, "1")
 	if err := updater.Relaunch(); err != nil {
 		log.Printf("could not restart ShopKeeper: %v", err)
 		reportFatal(fmt.Errorf("the update is installed but ShopKeeper could not be restarted: %w\n\nStart it again by hand", err))
@@ -60,10 +82,22 @@ func run() error {
 		return fmt.Errorf("config: %w", err)
 	}
 
+	// stopApp ends the main wait below; requestStop also says whether the app should start
+	// again afterwards (a restore) and whether to take the usual final backup on the way out.
+	stopCtx, stopApp := context.WithCancel(context.Background())
+	defer stopApp()
+	finalBackup := true
+	requestStop := func(restartAfter, backup bool) {
+		finalBackup = backup
+		restoreRestart.Store(restartAfter)
+		stopApp()
+	}
+
 	// The app shows its own window (Windows) unless NO_BROWSER is set; with
-	// no console, its log goes to a file.
+	// no console, its log goes to a file. Elsewhere setupLogging only does so
+	// if there is no terminal to log to.
 	windowMode := windowedUI && !noBrowser()
-	if windowMode {
+	if windowMode || !windowedUI {
 		setupLogging(filepath.Dir(cfg.DBPath))
 	}
 
@@ -77,6 +111,15 @@ func run() error {
 	log.Printf("ShopKeeper %s", update.Version)
 	updater.CleanupLeftovers()
 	log.Printf("backups: %s", absBackupDir)
+
+	// A restore chosen in the app last time is applied now, before the database file is
+	// opened. If it cannot be, say so rather than silently starting on the old data and
+	// letting the user believe it was restored.
+	if applied, err := db.ApplyPendingRestore(cfg.DBPath); err != nil {
+		return fmt.Errorf("applying the backup restore: %w", err)
+	} else if applied {
+		log.Printf("restored the database from the chosen backup")
+	}
 
 	conn, err := db.Open(cfg.DBPath, cfg.BackupDir)
 	if err != nil {
@@ -119,7 +162,20 @@ func run() error {
 
 	s := store.New(conn)
 	a := api.New(s, cfg.ShopName, cfg.Currency, cfg.Decimals).WithUpdater(updater)
-	h, err := handlers.New()
+	a.SetLang(cfg.Lang)
+	maint := api.Maintenance{
+		DBPath:    cfg.DBPath,
+		BackupDir: cfg.BackupDir,
+		// The restore took its own safety backup; another one would overwrite today's daily
+		// file, which may be the very backup being restored.
+		Restart: func(backup bool) { requestStop(true, backup) },
+	}
+	if !windowedUI {
+		// With a window, closing it quits. In a browser there is nothing to close.
+		maint.Quit = func() { requestStop(false, true) }
+	}
+	a.SetMaintenance(maint)
+	h, err := handlers.New(cfg.Lang)
 	if err != nil {
 		return fmt.Errorf("templates: %w", err)
 	}
@@ -135,19 +191,22 @@ func run() error {
 	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		if errors.Is(err, syscall.EADDRINUSE) {
-			close(backupStop)
-			<-backupDone
-			conn.Close()
+		close(backupStop)
+		<-backupDone
 
-			if alreadyRunning(cfg.Port) {
-				// Bring up the running copy's window; failing that, its page.
-				if !(windowMode && focusExisting()) {
-					openBrowser(fmt.Sprintf("http://localhost:%d", cfg.Port))
-				}
-				log.Printf("ShopKeeper is already running on port %d", cfg.Port)
-				os.Exit(0)
+		// Don't match a specific errno here: on Windows net.Listen returns the Winsock
+		// WSAEADDRINUSE (10048), which is not syscall.EADDRINUSE. Ask the port instead; if
+		// our own app answers, this is a second launch.
+		if alreadyRunning(cfg.Port) {
+			conn.Close()
+			// Bring up the running copy's window; failing that, its page.
+			if !(windowMode && focusExisting()) {
+				openBrowser(fmt.Sprintf("http://localhost:%d", cfg.Port))
 			}
+			log.Printf("ShopKeeper is already running on port %d", cfg.Port)
+			return errAlreadyRunning
+		}
+		if isAddrInUse(err) {
 			return fmt.Errorf("port %d is used by another program; set PORT=... to use another", cfg.Port)
 		}
 		return fmt.Errorf("listen on %s: %w", addr, err)
@@ -171,11 +230,11 @@ func run() error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(listener) }()
 	url := fmt.Sprintf("http://localhost:%d", cfg.Port)
-	if !windowMode {
+	if !windowMode && os.Getenv(restartedEnv) != "1" {
 		openBrowser(url)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(stopCtx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// Wait for whatever ends the app: the server failing, a stop signal, or
@@ -224,7 +283,9 @@ func run() error {
 	<-backupDone
 	// Final backup after the server has stopped taking requests, but
 	// before conn.Close() runs via the deferred call above.
-	runBackup(conn, cfg.BackupDir, cfg.BackupKeepDays)
+	if finalBackup {
+		runBackup(conn, cfg.BackupDir, cfg.BackupKeepDays)
+	}
 	if shutdownErr != nil {
 		return fmt.Errorf("shutdown: %w", shutdownErr)
 	}

@@ -16,11 +16,16 @@ type API struct {
 	currency string
 	decimals int
 	updater  *update.Updater // nil: the update routes are not served
+	lang     string
+	maint    Maintenance
 }
 
 func New(s *store.Store, shopName, currency string, decimals int) *API {
-	return &API{store: s, shopName: shopName, currency: currency, decimals: decimals}
+	return &API{store: s, shopName: shopName, currency: currency, decimals: decimals, lang: "en"}
 }
+
+// SetLang sets the default UI language the app reports in /api/config.
+func (a *API) SetLang(lang string) { a.lang = lang }
 
 // WithUpdater turns on the version and update routes.
 func (a *API) WithUpdater(u *update.Updater) *API {
@@ -36,6 +41,10 @@ func (a *API) Routes(port int) http.Handler {
 	mux.HandleFunc("GET /api/config", a.handleConfig)
 	mux.HandleFunc("GET /api/summary", a.handleSummary)
 	mux.HandleFunc("GET /api/backup", a.handleBackup)
+	mux.HandleFunc("GET /api/backups", a.handleListBackups)
+	mux.HandleFunc("POST /api/restore", a.handleRestore)
+	mux.HandleFunc("POST "+restoreUploadPath, a.handleRestoreUpload)
+	mux.HandleFunc("POST /api/quit", a.handleQuit)
 	mux.HandleFunc("GET /api/stock-log", a.handleStockLog)
 
 	mux.HandleFunc("GET /api/products", a.handleListProducts)

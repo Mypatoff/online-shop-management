@@ -28,7 +28,7 @@ loadMoreBtn.addEventListener("click", function () {
 function populateProductFilter(products) {
 	var allOption = document.createElement("option");
 	allOption.value = "";
-	allOption.textContent = "All products";
+	allOption.textContent = t("stocklog.all_products");
 	productFilter.appendChild(allOption);
 
 	products.forEach(function (p) {
@@ -80,7 +80,7 @@ function buildMovementRow(mv) {
 
 	addCell(tr, formatLocalTime(mv.created_at));
 	addCell(tr, mv.product_name);
-	addCell(tr, capitalize(mv.type));
+	addCell(tr, tOr("movement." + mv.type, mv.type));
 
 	var changeTd = document.createElement("td");
 	changeTd.textContent = (mv.delta > 0 ? "+" : "") + mv.delta;
@@ -88,7 +88,7 @@ function buildMovementRow(mv) {
 	tr.appendChild(changeTd);
 
 	addCell(tr, mv.stock_after);
-	addCell(tr, mv.reason || "—");
+	addCell(tr, mv.reason ? tOr("reason." + mv.reason, mv.reason) : "—");
 	addCell(tr, mv.note || "—");
 
 	return tr;
@@ -100,6 +100,3 @@ function addCell(tr, text) {
 	tr.appendChild(td);
 }
 
-function capitalize(s) {
-	return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-}

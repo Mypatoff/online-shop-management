@@ -38,7 +38,7 @@ function renderProducts(products, isFiltered) {
 	tbody.textContent = "";
 
 	if (products.length === 0) {
-		emptyMessageEl.textContent = isFiltered ? "No products match your search." : "No products yet.";
+		emptyMessageEl.textContent = isFiltered ? t("products.no_match") : t("products.empty");
 		emptyEl.classList.remove("hidden");
 		return;
 	}
@@ -76,18 +76,18 @@ function buildProductRow(p) {
 
 	var actionsTd = document.createElement("td");
 	actionsTd.className = "row-actions";
-	actionsTd.appendChild(makeActionButton("Edit", function () {
+	actionsTd.appendChild(makeActionButton(t("common.edit"), function () {
 		openEditProductModal(p);
 	}));
-	actionsTd.appendChild(makeActionButton("Adjust", function () {
+	actionsTd.appendChild(makeActionButton(t("products.adjust"), function () {
 		openAdjustStockModal(p, loadProducts);
 	}));
 	actionsTd.appendChild(
-		makeActionButton(p.archived ? "Unarchive" : "Archive", function () {
+		makeActionButton(p.archived ? t("products.unarchive") : t("products.archive"), function () {
 			setArchived(p, !p.archived);
 		})
 	);
-	actionsTd.appendChild(makeActionButton("History", function () {
+	actionsTd.appendChild(makeActionButton(t("products.history"), function () {
 		window.location.href = "/stock-log?product=" + p.id;
 	}));
 	tr.appendChild(actionsTd);
@@ -108,21 +108,19 @@ function setArchived(product, archived) {
 	var action = archived ? "archive" : "unarchive";
 	apiFetch("/api/products/" + product.id + "/" + action, { method: "POST", body: "{}" })
 		.then(loadProducts)
-		.catch(function (err) {
-			console.error(err);
-		});
+		.catch(showError);
 }
 
 function openAddProductModal() {
 	openModal({
-		title: "Add product",
-		submitLabel: "Add",
+		title: t("products.add"),
+		submitLabel: t("common.add"),
 		fields: [
-			{ name: "name", label: "Name", autofocus: true },
-			{ name: "sku", label: "SKU (optional)" },
-			{ name: "price", label: "Price" },
-			{ name: "stock", label: "Starting stock", value: "0" },
-			{ name: "low_stock_threshold", label: "Low stock threshold", value: "5" },
+			{ name: "name", label: t("products.f_name"), autofocus: true },
+			{ name: "sku", label: t("products.f_sku") },
+			{ name: "price", label: t("products.f_price") },
+			{ name: "stock", label: t("products.f_stock"), value: "0" },
+			{ name: "low_stock_threshold", label: t("products.f_threshold"), value: "5" },
 		],
 		onSubmit: function (values) {
 			var payload = validateProductForm(values, { includeStock: true });
@@ -133,13 +131,13 @@ function openAddProductModal() {
 
 function openEditProductModal(product) {
 	openModal({
-		title: "Edit product",
-		submitLabel: "Save",
+		title: t("products.edit"),
+		submitLabel: t("common.save"),
 		fields: [
-			{ name: "name", label: "Name", value: product.name, autofocus: true },
-			{ name: "sku", label: "SKU (optional)", value: product.sku },
-			{ name: "price", label: "Price", value: formatPriceForInput(product.price) },
-			{ name: "low_stock_threshold", label: "Low stock threshold", value: String(product.low_stock_threshold) },
+			{ name: "name", label: t("products.f_name"), value: product.name, autofocus: true },
+			{ name: "sku", label: t("products.f_sku"), value: product.sku },
+			{ name: "price", label: t("products.f_price"), value: formatPriceForInput(product.price) },
+			{ name: "low_stock_threshold", label: t("products.f_threshold"), value: String(product.low_stock_threshold) },
 		],
 		onSubmit: function (values) {
 			var payload = validateProductForm(values, { includeStock: false });
@@ -163,12 +161,12 @@ function formatPriceForInput(cents) {
 function validateProductForm(values, opts) {
 	var name = values.name.trim();
 	if (name.length < 1 || name.length > 100) {
-		throw fieldError("name", "Name must be 1-100 characters.");
+		throw fieldError("name", t("products.err_name"));
 	}
 
 	var sku = values.sku.trim();
 	if (sku.length > 40) {
-		throw fieldError("sku", "SKU must be at most 40 characters.");
+		throw fieldError("sku", t("products.err_sku"));
 	}
 
 	var price;
@@ -178,17 +176,17 @@ function validateProductForm(values, opts) {
 		throw fieldError("price", err.message);
 	}
 	if (price < 0 || price > 100000000000) {
-		throw fieldError("price", "Price must be between 0 and 100,000,000,000.");
+		throw fieldError("price", t("products.err_price"));
 	}
 
 	var threshold;
 	try {
-		threshold = parseWholeNumber(values.low_stock_threshold, { message: "Enter a whole number." });
+		threshold = parseWholeNumber(values.low_stock_threshold, { message: t("number.whole") });
 	} catch (err) {
 		throw fieldError("low_stock_threshold", err.message);
 	}
 	if (threshold < 0 || threshold > 1000000) {
-		throw fieldError("low_stock_threshold", "Threshold must be between 0 and 1,000,000.");
+		throw fieldError("low_stock_threshold", t("products.err_threshold"));
 	}
 
 	var payload = { name: name, sku: sku, price: price, low_stock_threshold: threshold };
@@ -196,12 +194,12 @@ function validateProductForm(values, opts) {
 	if (opts.includeStock) {
 		var stock;
 		try {
-			stock = parseWholeNumber(values.stock, { message: "Enter a whole number." });
+			stock = parseWholeNumber(values.stock, { message: t("number.whole") });
 		} catch (err) {
 			throw fieldError("stock", err.message);
 		}
 		if (stock < 0 || stock > 1000000) {
-			throw fieldError("stock", "Stock must be between 0 and 1,000,000.");
+			throw fieldError("stock", t("products.err_stock"));
 		}
 		payload.stock = stock;
 	}

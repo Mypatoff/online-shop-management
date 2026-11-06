@@ -60,7 +60,7 @@ function submitEntry() {
 
 	var table = tableInput.value.trim();
 	if (table.length > 30) {
-		entryErrorEl.textContent = "Table must be at most 30 characters.";
+		entryErrorEl.textContent = t("billiard.err_table_length");
 		tableInput.focus();
 		return;
 	}
@@ -69,14 +69,14 @@ function submitEntry() {
 	var minutesRaw = minutesInput.value.trim();
 	if (minutesRaw !== "") {
 		try {
-			minutes = parseWholeNumber(minutesRaw, { message: "Minutes must be a whole number." });
+			minutes = parseWholeNumber(minutesRaw, { message: t("billiard.err_minutes_whole") });
 		} catch (err) {
 			entryErrorEl.textContent = err.message;
 			minutesInput.focus();
 			return;
 		}
 		if (minutes < 0 || minutes > 1440) {
-			entryErrorEl.textContent = "Minutes must be between 0 and 1440.";
+			entryErrorEl.textContent = t("billiard.err_minutes_range");
 			minutesInput.focus();
 			return;
 		}
@@ -84,7 +84,7 @@ function submitEntry() {
 
 	var note = noteInput.value.trim();
 	if (note.length > 200) {
-		entryErrorEl.textContent = "Note must be at most 200 characters.";
+		entryErrorEl.textContent = t("error.note_length");
 		noteInput.focus();
 		return;
 	}
@@ -95,7 +95,7 @@ function submitEntry() {
 		body: JSON.stringify({ amount: amount, table: table, minutes: minutes, note: note }),
 	})
 		.then(function (entry) {
-			showToast("Saved " + formatMoney(entry.amount));
+			showToast(t("billiard.saved", { v: formatMoney(entry.amount) }));
 			amountInput.value = "";
 			noteInput.value = "";
 			amountInput.focus();
@@ -192,7 +192,7 @@ function buildEntryRow(entry) {
 	addCell(tr, entry.minutes != null ? String(entry.minutes) : "—");
 	addCell(tr, entry.note || "—");
 	addCell(tr, formatMoney(entry.amount));
-	addCell(tr, entry.voided ? "Voided" : "Completed");
+	addCell(tr, entry.voided ? t("common.voided") : t("common.completed"));
 
 	var actionsTd = document.createElement("td");
 	actionsTd.className = "row-actions";
@@ -200,23 +200,23 @@ function buildEntryRow(entry) {
 		var voidBtn = document.createElement("button");
 		voidBtn.type = "button";
 		voidBtn.className = "btn btn-secondary btn-small";
-		voidBtn.textContent = "Void";
+		voidBtn.textContent = t("common.void");
 		voidBtn.onclick = function () {
-			if (!confirm("Void this billiard entry?")) return;
-			apiFetch("/api/billiard/" + entry.id + "/void", { method: "POST", body: "{}" })
-				.then(function () {
-					loadDay(billiardCurrentDate);
-				})
-				.catch(function (err) {
-					alert(err.message);
-				});
+			confirmDialog(t("billiard.void_confirm"), { title: t("billiard.void_title"), confirmLabel: t("common.void") }).then(function (ok) {
+				if (!ok) return;
+				apiFetch("/api/billiard/" + entry.id + "/void", { method: "POST", body: "{}" })
+					.then(function () {
+						loadDay(billiardCurrentDate);
+					})
+					.catch(showError);
+			});
 		};
 		actionsTd.appendChild(voidBtn);
 
 		var receiptBtn = document.createElement("button");
 		receiptBtn.type = "button";
 		receiptBtn.className = "btn btn-secondary btn-small";
-		receiptBtn.textContent = "Receipt";
+		receiptBtn.textContent = t("common.receipt");
 		receiptBtn.onclick = function () {
 			printBilliardReceipt(entry);
 		};
@@ -244,12 +244,12 @@ function printBilliardReceipt(entry) {
 	var shopName = (window.appConfig && window.appConfig.shop_name) || "ShopKeeper";
 
 	appendParagraph(container, shopName);
-	appendParagraph(container, new Date(entry.created_at * 1000).toLocaleString());
-	appendParagraph(container, "Billiard");
-	if (entry.table) appendParagraph(container, "Table: " + entry.table);
-	if (entry.minutes != null) appendParagraph(container, "Minutes: " + entry.minutes);
-	appendParagraph(container, "Amount: " + formatMoney(entry.amount));
-	appendParagraph(container, "Thank you");
+	appendParagraph(container, formatLocalTime(entry.created_at));
+	appendParagraph(container, t("nav.billiard"));
+	if (entry.table) appendParagraph(container, t("receipt.table", { v: entry.table }));
+	if (entry.minutes != null) appendParagraph(container, t("receipt.minutes", { v: entry.minutes }));
+	appendParagraph(container, t("receipt.amount", { v: formatMoney(entry.amount) }));
+	appendParagraph(container, t("receipt.thanks"));
 
 	var style = document.createElement("style");
 	style.id = "receipt-page";

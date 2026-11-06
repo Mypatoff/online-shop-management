@@ -53,19 +53,19 @@
 	function setButtons(opts) {
 		goBtn.hidden = !opts.go;
 		goBtn.disabled = false;
-		goBtn.textContent = opts.goLabel || "Update now";
+		goBtn.textContent = opts.goLabel || t("update.go");
 		closeBtn.hidden = !!opts.hideClose;
-		closeBtn.textContent = opts.closeLabel || "Close";
+		closeBtn.textContent = opts.closeLabel || t("common.close");
 	}
 
 	function check() {
 		setButtons({});
-		show(para("Checking GitHub for a newer version…"));
+		show(para(t("update.checking")));
 		apiFetch("/api/update/check")
 			.then(showResult)
 			.catch(function (err) {
 				show(para(err.message, "error"));
-				setButtons({ go: true, goLabel: "Try again" });
+				setButtons({ go: true, goLabel: t("update.try_again") });
 				goBtn.onclick = check;
 			});
 	}
@@ -73,7 +73,10 @@
 	function showResult(info) {
 		var current = label(info.current);
 		if (!info.available) {
-			show(para(info.reason || "You have the latest version.", null), para("Installed: " + current + (info.latest ? " · Latest: " + label(info.latest) : "")));
+			show(
+				para(info.reason || t("update.latest"), null),
+				para(info.latest ? t("update.installed_latest", { current: current, latest: label(info.latest) }) : t("update.installed", { current: current }))
+			);
 			setButtons({});
 			return;
 		}
@@ -84,14 +87,18 @@
 			notes.textContent = info.notes;
 		}
 		if (!info.can_apply) {
-			show(para("Version " + label(info.latest) + " is available (you have " + current + ")."), para(info.reason, "error"), info.url ? para("Release page: " + info.url) : null);
+			show(
+				para(t("update.available_line", { latest: label(info.latest), current: current })),
+				para(info.reason, "error"),
+				info.url ? para(t("update.release_page", { url: info.url })) : null
+			);
 			setButtons({});
 			return;
 		}
 		show(
-			para("Version " + label(info.latest) + " is available (you have " + current + ")."),
+			para(t("update.available_line", { latest: label(info.latest), current: current })),
 			notes,
-			para("Your products, sales and backups are kept. ShopKeeper takes a backup, then restarts by itself.")
+			para(t("update.kept_note"))
 		);
 		setButtons({ go: true });
 		goBtn.onclick = install;
@@ -101,7 +108,7 @@
 		running = true;
 		goBtn.disabled = true;
 		closeBtn.hidden = true;
-		show(para("Starting the update…"), progress(0));
+		show(para(t("update.starting")), progress(0));
 		apiFetch("/api/update/apply", { method: "POST", body: "{}" })
 			.then(function () {
 				poll(Date.now());
@@ -113,8 +120,8 @@
 
 	function fail(message) {
 		running = false;
-		show(para("The update did not finish. Nothing was changed.", null), para(message, "error"));
-		setButtons({ go: true, goLabel: "Try again" });
+		show(para(t("update.failed_title"), null), para(message, "error"));
+		setButtons({ go: true, goLabel: t("update.try_again") });
 		goBtn.onclick = check;
 	}
 
@@ -125,12 +132,12 @@
 		apiFetch("/api/update/status")
 			.then(function (st) {
 				if (st.state === "error") {
-					fail(st.error || "unknown error");
+					fail(st.error || t("error.unknown"));
 				} else if (st.state === "restarting") {
-					show(para("Installing and restarting…"), progress(100));
+					show(para(t("update.installing")), progress(100));
 					waitForRestart(Date.now());
 				} else {
-					show(para("Downloading the new version… " + st.percent + "%"), progress(st.percent));
+					show(para(t("update.downloading", { pct: st.percent })), progress(st.percent));
 					setTimeout(function () {
 						poll(startedAt);
 					}, 500);
@@ -138,7 +145,7 @@
 			})
 			.catch(function () {
 				// The server may already be shutting down for the restart.
-				show(para("Installing and restarting…"), progress(100));
+				show(para(t("update.installing")), progress(100));
 				waitForRestart(Date.now());
 			});
 	}
@@ -157,14 +164,14 @@
 						waitForRestart(startedAt); // still the old server shutting down
 					} else {
 						running = false;
-						show(para("ShopKeeper restarted, but the version did not change: " + before + "."), para("Check shop.log next to the database for the reason.", "error"));
+						show(para(t("update.same_version", { v: before })), para(t("update.check_log"), "error"));
 						setButtons({});
 					}
 				})
 				.catch(function () {
 					if (Date.now() - startedAt > 90000) {
 						running = false;
-						show(para("ShopKeeper did not come back. Start it again from its shortcut.", "error"));
+						show(para(t("update.no_return"), "error"));
 						setButtons({});
 					} else {
 						waitForRestart(startedAt);

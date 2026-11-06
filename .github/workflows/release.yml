@@ -93,3 +93,30 @@ jobs:
             dist/ShopKeeper-Setup.exe
             dist/ShopKeeper.exe
             dist/SHA256SUMS.txt
+
+  # The Linux package (installer script, menu launcher, icons) is built on Linux so the scripts
+  # keep their executable bits. It is added to the release the windows job created.
+  linux-package:
+    if: github.ref_type == 'tag'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to add a file to the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build the package
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          VERSION="${REF#v}" ./build.sh
+          ls -l dist
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" dist/ShopKeeper-linux.tar.gz --clobber

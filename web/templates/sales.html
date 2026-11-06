@@ -1,65 +1,65 @@
 {{define "content"}}
 <div class="no-print">
-	<h1>Sales</h1>
+	<h1>{{t "sales.title"}}</h1>
 
 	<div class="toolbar">
 		<label class="field-inline">
-			<span>Date</span>
+			<span>{{t "common.date"}}</span>
 			<input type="date" id="date-input">
 		</label>
-		<button type="button" id="prev-day-btn" class="btn btn-secondary btn-small">◀ Previous</button>
-		<button type="button" id="next-day-btn" class="btn btn-secondary btn-small">Next ▶</button>
-		<button type="button" id="print-report-btn" class="btn btn-secondary">Print daily report</button>
+		<button type="button" id="prev-day-btn" class="btn btn-secondary btn-small">{{t "common.previous"}}</button>
+		<button type="button" id="next-day-btn" class="btn btn-secondary btn-small">{{t "common.next"}}</button>
+		<button type="button" id="print-report-btn" class="btn btn-secondary">{{t "sales.print_report"}}</button>
 	</div>
 
 	<section class="stats-grid stats-grid-compact">
 		<div class="stat-card">
-			<div class="stat-label">Revenue</div>
+			<div class="stat-label">{{t "sales.revenue"}}</div>
 			<div class="stat-value" id="day-revenue">—</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-label">Units sold</div>
+			<div class="stat-label">{{t "sales.units_sold"}}</div>
 			<div class="stat-value" id="day-units">—</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-label">Sales</div>
+			<div class="stat-label">{{t "sales.sales"}}</div>
 			<div class="stat-value" id="day-count">—</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-label">Billiard revenue</div>
+			<div class="stat-label">{{t "sales.billiard_revenue"}}</div>
 			<div class="stat-value" id="day-billiard-revenue">—</div>
 		</div>
 	</section>
 
 	<p class="total-revenue-line" id="day-total-revenue-line"></p>
 
-	<h2>By product</h2>
-	<p id="by-product-empty" class="empty hidden">No sales on this day.</p>
+	<h2>{{t "sales.by_product"}}</h2>
+	<p id="by-product-empty" class="empty hidden">{{t "sales.none_today"}}</p>
 	<div class="table-scroll" id="by-product-wrap">
 		<table class="data-table" id="by-product-table">
 			<thead>
 				<tr>
-					<th>Product</th>
-					<th>Units</th>
-					<th>Revenue</th>
+					<th>{{t "sales.col_product"}}</th>
+					<th>{{t "sales.col_units"}}</th>
+					<th>{{t "sales.col_revenue"}}</th>
 				</tr>
 			</thead>
 			<tbody id="by-product-tbody"></tbody>
 		</table>
 	</div>
 
-	<h2>All sales</h2>
-	<p id="sales-empty" class="empty hidden">No sales on this day.</p>
+	<h2>{{t "sales.all_sales"}}</h2>
+	<p id="sales-empty" class="empty hidden">{{t "sales.none_today"}}</p>
 	<div class="table-scroll" id="sales-wrap">
 		<table class="data-table" id="sales-table">
 			<thead>
 				<tr>
-					<th>Time</th>
-					<th>Product</th>
-					<th>Qty</th>
-					<th>Unit price</th>
-					<th>Total</th>
-					<th>Status</th>
+					<th>{{t "common.time"}}</th>
+					<th>{{t "sales.col_product"}}</th>
+					<th>{{t "sales.col_qty"}}</th>
+					<th>{{t "sales.col_unit_price"}}</th>
+					<th>{{t "sales.col_total"}}</th>
+					<th>{{t "common.status"}}</th>
 					<th></th>
 				</tr>
 			</thead>
@@ -67,18 +67,18 @@
 		</table>
 	</div>
 
-	<h2>Billiard</h2>
-	<p id="billiard-day-empty" class="empty hidden">No billiard entries on this day.</p>
+	<h2>{{t "nav.billiard"}}</h2>
+	<p id="billiard-day-empty" class="empty hidden">{{t "billiard.none_today"}}</p>
 	<div class="table-scroll" id="billiard-day-wrap">
 		<table class="data-table" id="billiard-day-table">
 			<thead>
 				<tr>
-					<th>Time</th>
-					<th>Table</th>
-					<th>Minutes</th>
-					<th>Note</th>
-					<th>Amount</th>
-					<th>Status</th>
+					<th>{{t "common.time"}}</th>
+					<th>{{t "billiard.col_table"}}</th>
+					<th>{{t "billiard.col_minutes"}}</th>
+					<th>{{t "billiard.col_note"}}</th>
+					<th>{{t "billiard.col_amount"}}</th>
+					<th>{{t "common.status"}}</th>
 				</tr>
 			</thead>
 			<tbody id="billiard-day-tbody"></tbody>

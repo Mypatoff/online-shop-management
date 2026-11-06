@@ -1,6 +1,6 @@
 {{define "layout"}}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Lang}}">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,17 +14,23 @@
 		<div class="topbar-inner">
 			<span class="brand">
 				<img class="brand-icon" src="/static/icon.svg" alt="" width="26" height="26">ShopKeeper
-				<span class="version" id="app-version" title="Installed version"></span>
+				<span class="version" id="app-version" title="{{t "update.version_title"}}"></span>
 			</span>
 			<nav>
-				<a href="/" class="{{if eq .Active "dashboard"}}active{{end}}">Dashboard</a>
-				<a href="/products" class="{{if eq .Active "products"}}active{{end}}">Products</a>
-				<a href="/sell" class="{{if eq .Active "sell"}}active{{end}}">Sell</a>
-				<a href="/sales" class="{{if eq .Active "sales"}}active{{end}}">Sales</a>
-				<a href="/stock-log" class="{{if eq .Active "stock-log"}}active{{end}}">Stock log</a>
-				<a href="/billiard" class="{{if eq .Active "billiard"}}active{{end}}">Billiard</a>
-				<a href="/api/backup" class="backup-link" download>Download backup</a>
-				<button type="button" id="update-btn" class="btn btn-small update-btn" title="Check GitHub for a newer version">Update</button>
+				<a href="/" class="{{if eq .Active "dashboard"}}active{{end}}">{{t "nav.dashboard"}}</a>
+				<a href="/products" class="{{if eq .Active "products"}}active{{end}}">{{t "nav.products"}}</a>
+				<a href="/sell" class="{{if eq .Active "sell"}}active{{end}}">{{t "nav.sell"}}</a>
+				<a href="/sales" class="{{if eq .Active "sales"}}active{{end}}">{{t "nav.sales"}}</a>
+				<a href="/stock-log" class="{{if eq .Active "stock-log"}}active{{end}}">{{t "nav.stock_log"}}</a>
+				<a href="/billiard" class="{{if eq .Active "billiard"}}active{{end}}">{{t "nav.billiard"}}</a>
+				<a href="/api/backup" class="backup-link" download>{{t "nav.download_backup"}}</a>
+				<button type="button" id="restore-btn" class="nav-btn">{{t "nav.restore"}}</button>
+				<button type="button" id="update-btn" class="nav-btn update-btn" title="{{t "update.btn_title"}}">{{t "update.button"}}</button>
+				<select id="lang-select" class="nav-select" aria-label="{{t "nav.language"}}">
+					{{range .Langs}}<option value="{{.Code}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>
+					{{end}}
+				</select>
+				<button type="button" id="quit-btn" class="nav-btn hidden">{{t "nav.quit"}}</button>
 			</nav>
 		</div>
 	</header>
@@ -36,27 +42,32 @@
 	<dialog id="modal" class="modal no-print">
 		<form id="modal-form" class="modal-form">
 			<h2 id="modal-title"></h2>
+			<p id="modal-message" class="modal-message hidden"></p>
 			<div id="modal-body" class="modal-body"></div>
 			<p id="modal-error" class="error" role="alert"></p>
 			<div class="modal-actions">
-				<button type="button" id="modal-cancel" class="btn btn-ghost">Cancel</button>
-				<button type="submit" id="modal-submit" class="btn btn-primary">Save</button>
+				<button type="button" id="modal-cancel" class="btn btn-ghost">{{t "common.cancel"}}</button>
+				<button type="submit" id="modal-submit" class="btn btn-primary">{{t "common.save"}}</button>
 			</div>
 		</form>
 	</dialog>
 
 	<dialog id="update-dialog" class="modal no-print" aria-labelledby="update-title">
 		<div class="modal-form">
-			<h2 id="update-title">Update ShopKeeper</h2>
+			<h2 id="update-title">{{t "update.title"}}</h2>
 			<div id="update-body" class="update-body" aria-live="polite"></div>
 			<div class="modal-actions">
-				<button type="button" id="update-close" class="btn btn-ghost">Close</button>
-				<button type="button" id="update-go" class="btn btn-primary" hidden>Update now</button>
+				<button type="button" id="update-close" class="btn btn-ghost">{{t "common.close"}}</button>
+				<button type="button" id="update-go" class="btn btn-primary" hidden>{{t "update.go"}}</button>
 			</div>
 		</div>
 	</dialog>
 
+	<div id="toast" class="toast hidden" role="status"></div>
+
+	<script>window.LANG = "{{.Lang}}"; window.LOCALE_TAG = "{{.LocaleTag}}"; window.I18N = {{.I18N}};</script>
 	<script src="/static/app.js"></script>
+	<script src="/static/maintenance.js"></script>
 	<script src="/static/update.js"></script>
 	{{if .PageScript}}<script src="/static/{{.PageScript}}"></script>{{end}}
 </body>

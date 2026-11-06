@@ -1,5 +1,37 @@
-// Shared helpers used by every page: talking to the JSON API,
+// Shared helpers used by every page: translations, talking to the JSON API,
 // formatting/parsing money, and a generic modal dialog.
+
+// t looks up a UI string in the table the server embedded in the page
+// (window.I18N, for the current language) and fills {name} placeholders from
+// params. A key with no entry shows as the key itself, so a gap is visible.
+function t(key, params) {
+	var s = window.I18N && window.I18N[key] != null ? window.I18N[key] : key;
+	if (params) {
+		s = s.replace(/\{(\w+)\}/g, function (m, name) {
+			return params[name] != null ? params[name] : m;
+		});
+	}
+	return s;
+}
+
+// tOr is t for keys that may not exist (values that come from the server,
+// such as a stock movement's reason): it returns fallback instead of the key.
+function tOr(key, fallback) {
+	return window.I18N && window.I18N[key] != null ? window.I18N[key] : fallback;
+}
+
+// localeTag is the BCP 47 tag dates are formatted with (en-GB, uz-UZ, ru-RU).
+function localeTag() {
+	return window.LOCALE_TAG || "en-GB";
+}
+
+// numberSeparators gives the thousands and decimal separators for the
+// language: Uzbek and Russian group with a non-breaking space and use a
+// decimal comma; English groups with commas and uses a decimal point.
+function numberSeparators() {
+	if (window.LANG === "en") return { group: ",", decimal: "." };
+	return { group: NBSP, decimal: "," };
+}
 
 // Loaded once and cached; pages await this before they format or
 // parse any money value.
@@ -25,26 +57,28 @@ function apiFetch(path, options) {
 			})
 			.then(function (body) {
 				if (!res.ok) {
-					throw new Error(body.error || "Request failed (" + res.status + ").");
+					throw new Error(body.error || t("error.request_failed", { status: res.status }));
 				}
 				return body;
 			});
 	});
 }
 
-// NBSP (U+00A0) separates thousands groups, and separates the trailing
-// currency label from the number — using a non-breaking space (rather
-// than a regular one) keeps "150 000 so'm" from ever wrapping onto two
-// lines.
-var NBSP = " ";
+// NBSP (U+00A0) separates the trailing currency label from the number, and
+// (in Uzbek and Russian) thousands groups — using a non-breaking space
+// (rather than a regular one) keeps "150 000 so'm" from ever wrapping onto
+// two lines.
+var NBSP = "\u00a0";
 
-// groupThousands inserts NBSP every 3 digits from the right, e.g.
-// "150000" -> "150 000". digits must be a plain non-negative
-// integer string (no sign, no separators).
+// groupThousands inserts the language's group separator every 3 digits
+// from the right, e.g. "150000" -> "150 000" (or "150,000" in English).
+// digits must be a plain non-negative integer string (no sign, no
+// separators).
 function groupThousands(digits) {
+	var sep = numberSeparators().group;
 	var out = "";
 	for (var i = 0; i < digits.length; i++) {
-		if (i > 0 && (digits.length - i) % 3 === 0) out += NBSP;
+		if (i > 0 && (digits.length - i) % 3 === 0) out += sep;
 		out += digits[i];
 	}
 	return out;
@@ -69,7 +103,7 @@ function formatMoney(amount) {
 	while (fracStr.length < decimals) fracStr = "0" + fracStr;
 
 	var display = groupThousands(String(whole));
-	if (decimals > 0) display += "," + fracStr;
+	if (decimals > 0) display += numberSeparators().decimal + fracStr;
 
 	var withSign = (negative ? "-" : "") + display;
 	return cfg.currency ? withSign + NBSP + cfg.currency : withSign;
@@ -87,29 +121,29 @@ function parseMoney(input) {
 	var decimals = cfg.decimals;
 	var stripped = String(input).trim().replace(/\s/g, "");
 
-	if (stripped === "") throw new Error("Enter an amount.");
+	if (stripped === "") throw new Error(t("money.enter_amount"));
 
 	if (decimals === 0) {
 		if (stripped.indexOf(".") !== -1 || stripped.indexOf(",") !== -1) {
-			throw new Error("Enter whole so'm without decimals, e.g. 150000");
+			throw new Error(t("money.whole_only"));
 		}
 		if (!/^\d+$/.test(stripped)) {
-			throw new Error("Enter whole so'm without decimals, e.g. 150000");
+			throw new Error(t("money.whole_only"));
 		}
 		return parseInt(stripped, 10);
 	}
 
 	var s = stripped.replace(",", ".");
 	var parts = s.split(".");
-	if (parts.length > 2) throw new Error("Amount has too many decimal points.");
+	if (parts.length > 2) throw new Error(t("money.too_many_points"));
 
 	var wholePart = parts[0];
 	var fracPart = parts.length === 2 ? parts[1] : "";
 
-	if (!/^\d+$/.test(wholePart)) throw new Error("Amount must be a plain number.");
-	if (fracPart !== "" && !/^\d+$/.test(fracPart)) throw new Error("Amount must be a plain number.");
+	if (!/^\d+$/.test(wholePart)) throw new Error(t("money.plain_number"));
+	if (fracPart !== "" && !/^\d+$/.test(fracPart)) throw new Error(t("money.plain_number"));
 	if (fracPart.length > decimals) {
-		throw new Error("Amount allows at most " + decimals + " decimal place" + (decimals === 1 ? "" : "s") + ".");
+		throw new Error(t("money.max_decimals", { n: decimals }));
 	}
 	while (fracPart.length < decimals) fracPart += "0";
 
@@ -129,7 +163,7 @@ function parseWholeNumber(input, opts) {
 	var s = String(input).trim();
 	var pattern = opts.allowNegative ? /^-?\d+$/ : /^\d+$/;
 	if (!pattern.test(s)) {
-		throw new Error(opts.message || "Enter a whole number.");
+		throw new Error(opts.message || t("number.whole"));
 	}
 	return parseInt(s, 10);
 }
@@ -146,10 +180,15 @@ function fieldError(field, message) {
 // openModal renders a small form into the shared <dialog id="modal">
 // and wires up submit/cancel. opts:
 //   title: string
+//   message: string, optional text shown above the fields
 //   submitLabel: string (default "Save")
+//   danger: true styles the submit button as a destructive action
 //   fields: [{ name, label, type, value, autofocus }]
 //   onSubmit: function(values) -> Promise, rejected with a fieldError
 //             or plain Error on failure, resolved on success.
+//   onClose: function(submitted) called once when the dialog closes, however
+//            it closes (submitted, cancelled, Esc); submitted is true only
+//            after onSubmit succeeded.
 function openModal(opts) {
 	var modal = document.getElementById("modal");
 	var form = document.getElementById("modal-form");
@@ -158,11 +197,17 @@ function openModal(opts) {
 	var errorEl = document.getElementById("modal-error");
 	var submitBtn = document.getElementById("modal-submit");
 	var cancelBtn = document.getElementById("modal-cancel");
+	var messageEl = document.getElementById("modal-message");
 
 	title.textContent = opts.title;
 	errorEl.textContent = "";
-	submitBtn.textContent = opts.submitLabel || "Save";
+	submitBtn.textContent = opts.submitLabel || t("common.save");
+	submitBtn.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
+	cancelBtn.textContent = t("common.cancel");
+	messageEl.textContent = opts.message || "";
+	messageEl.classList.toggle("hidden", !opts.message);
 	body.textContent = "";
+	var submitted = false;
 
 	var inputs = {};
 	opts.fields.forEach(function (f) {
@@ -207,7 +252,7 @@ function openModal(opts) {
 		});
 	}
 
-	function showError(err) {
+	function showFormError(err) {
 		var message = err && err.message ? err.message : String(err);
 		var target = err && err.field && body.querySelector('[data-field-error-for="' + err.field + '"]');
 		if (target) {
@@ -229,69 +274,121 @@ function openModal(opts) {
 				return opts.onSubmit(values);
 			})
 			.then(function () {
+				submitted = true;
 				modal.close();
 			})
-			.catch(showError);
+			.catch(showFormError);
 	};
 
 	cancelBtn.onclick = function () {
 		modal.close();
 	};
 
+	// "close" fires for every way out (submit, Cancel, Esc). Assigning the
+	// property, not adding a listener, so a dialog opened later replaces this
+	// one's handler instead of stacking on it.
+	modal.onclose = function () {
+		modal.onclose = null;
+		if (opts.onClose) opts.onClose(submitted);
+	};
+
 	modal.showModal();
 	var first = opts.fields[0];
-	if (first) inputs[first.name].focus();
+	if (first) {
+		inputs[first.name].focus();
+	} else if (opts.danger) {
+		cancelBtn.focus(); // a destructive default must not be one Enter away
+	} else {
+		submitBtn.focus();
+	}
+}
+
+// confirmDialog asks the user to confirm an action in the app's own modal
+// (not window.confirm, which blocks the page and may be suppressed by an
+// embedded WebView). It resolves true only if they confirm.
+//   opts: { title, confirmLabel, danger }
+function confirmDialog(message, opts) {
+	opts = opts || {};
+	return new Promise(function (resolve) {
+		openModal({
+			title: opts.title || t("confirm.title"),
+			message: message,
+			submitLabel: opts.confirmLabel || t("common.confirm"),
+			danger: opts.danger !== false,
+			fields: [],
+			onSubmit: function () {},
+			onClose: function (submitted) {
+				resolve(submitted);
+			},
+		});
+	});
 }
 
 // formatLocalTime turns a unix-seconds timestamp into the user's local
 // date/time string, for display in sales lists.
 function formatLocalTime(unixSeconds) {
-	return new Date(unixSeconds * 1000).toLocaleString();
+	return new Date(unixSeconds * 1000).toLocaleString(localeTag());
+}
+
+// formatDateDisplay turns a YYYY-MM-DD date (as the API uses) into the form
+// people read in the current language: 05.10.2026 in Uzbek and Russian, the
+// ISO form in English.
+function formatDateDisplay(dateStr) {
+	var parts = String(dateStr).split("-");
+	if (window.LANG === "en" || parts.length !== 3) return dateStr;
+	return parts[2] + "." + parts[1] + "." + parts[0];
 }
 
 // showToast briefly shows a message in the shared #toast element.
 var toastTimer = null;
-function showToast(message) {
+function showToast(message, opts) {
 	var el = document.getElementById("toast");
 	if (!el) return;
+	opts = opts || {};
 	el.textContent = message;
+	el.classList.toggle("toast-error", !!opts.error);
 	el.classList.remove("hidden");
 	clearTimeout(toastTimer);
 	toastTimer = setTimeout(function () {
 		el.classList.add("hidden");
-	}, 3000);
+	}, opts.error ? 6000 : 3000);
+}
+
+// showError reports a failure (replacing window.alert): a red toast that
+// stays a little longer than a success message.
+function showError(err) {
+	showToast(err && err.message ? err.message : String(err), { error: true });
 }
 
 // openAdjustStockModal is shared by the dashboard's low-stock list and
 // the products table: both let the user change a product's stock by
 // a positive or negative amount.
-var adjustReasonOptions = [
-	{ value: "restock", label: "Restock" },
-	{ value: "recount", label: "Recount" },
-	{ value: "damaged", label: "Damaged" },
-	{ value: "other", label: "Other" },
-];
+function adjustReasonOptions() {
+	return ["restock", "recount", "damaged", "other"].map(function (value) {
+		return { value: value, label: t("reason." + value) };
+	});
+}
 
 function openAdjustStockModal(product, onSuccess) {
 	openModal({
-		title: "Adjust stock — " + product.name,
-		submitLabel: "Apply",
+		title: t("adjust.title", { name: product.name }),
+		submitLabel: t("adjust.apply"),
 		fields: [
-			{ name: "delta", label: "Change stock by (e.g. 10 or -2)", autofocus: true },
-			{ name: "reason", label: "Reason", type: "select", options: adjustReasonOptions, value: "restock" },
-			{ name: "note", label: "Note (optional)" },
+			{ name: "delta", label: t("adjust.delta"), autofocus: true },
+			{ name: "reason", label: t("adjust.reason"), type: "select", options: adjustReasonOptions(), value: "restock" },
+			{ name: "note", label: t("common.note_optional") },
 		],
 		onSubmit: function (values) {
 			var delta;
 			try {
-				delta = parseWholeNumber(values.delta, { allowNegative: true, message: "Enter a whole number like 10 or -2." });
+				delta = parseWholeNumber(values.delta, { allowNegative: true, message: t("adjust.delta_invalid") });
 			} catch (err) {
 				throw fieldError("delta", err.message);
 			}
-			if (delta === 0) throw fieldError("delta", "Enter a non-zero number.");
+			if (delta === 0) throw fieldError("delta", t("adjust.delta_zero"));
 
 			var note = values.note.trim();
-			if (note.length > 200) throw fieldError("note", "Note must be at most 200 characters.");
+			if (note.length > 200) throw fieldError("note", t("error.note_length"));
 
 			return apiFetch("/api/products/" + product.id + "/adjust", {
 				method: "POST",

@@ -1,0 +1,71 @@
+# Checks every push and pull request, so a broken change is found when it is made
+# rather than when a release is tagged.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is where the window, the port-in-use check and file renames
+        # behave differently, so it runs the same tests.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Formatting
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  build:
+    name: Build (cross-compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The Windows build has files the Linux one never compiles (the window,
+      # the icon); vet them too.
+      - name: Vet windows/amd64
+        run: GOOS=windows GOARCH=amd64 go vet ./...
+
+      - name: Build windows/amd64 and linux/amd64, and the Linux package
+        run: ./build.sh
+
+      - name: Check the build
+        run: |
+          ls -l dist
+          tar -tzf dist/ShopKeeper-linux.tar.gz
+          tar -xzOf dist/ShopKeeper-linux.tar.gz ShopKeeper-linux/install.sh | bash -n

@@ -14,6 +14,8 @@ func (a *API) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"shop_name": a.shopName,
 		"currency":  a.currency,
 		"decimals":  a.decimals,
+		"lang":      a.lang,
+		"can_quit":  a.maint.Quit != nil,
 	})
 }
 
@@ -30,13 +32,13 @@ func (a *API) handleSummary(w http.ResponseWriter, r *http.Request) {
 // at all, so a failure can still be reported as a clean JSON 500 with
 // no download headers, rather than a half-written attachment.
 func (a *API) handleBackup(w http.ResponseWriter, r *http.Request) {
-	tmpPath, err := a.store.BackupToTempFile()
+	tmpPath, cleanup, err := a.store.BackupToTempFile()
 	if err != nil {
 		log.Printf("backup failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "could not create backup")
 		return
 	}
-	defer os.Remove(tmpPath) //nolint:errcheck // best effort cleanup
+	defer cleanup()
 
 	f, err := os.Open(tmpPath)
 	if err != nil {

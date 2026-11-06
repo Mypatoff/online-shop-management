@@ -11,7 +11,16 @@ import (
 // already had its tables (products/sales) before versioning existed is
 // treated as version 1; a brand-new database starts at version 0 and is
 // created directly at currentVersion.
-const currentVersion = 3
+//
+//	1  products + sales (never versioned)
+//	2  stock_movements, backfilled with one 'initial' row per product
+//	3  billiard_entries
+//	4  indexes for the date-range, sale and stock-movement queries
+const currentVersion = 4
+
+// CurrentVersion is the schema version this build reads and writes. A
+// database with a higher user_version was written by a newer ShopKeeper.
+const CurrentVersion = currentVersion
 
 const stockMovementsSchema = `
 CREATE TABLE IF NOT EXISTS stock_movements (
@@ -65,7 +74,10 @@ func migrate(conn *sql.DB, backupDir string, hadTablesBefore bool) error {
 		return fmt.Errorf("read user_version: %w", err)
 	}
 
-	if version >= currentVersion {
+	if version > currentVersion {
+		return fmt.Errorf("database user_version %d is newer than this program supports (%d); update ShopKeeper", version, currentVersion)
+	}
+	if version == currentVersion {
 		return nil
 	}
 
@@ -78,6 +90,9 @@ func migrate(conn *sql.DB, backupDir string, hadTablesBefore bool) error {
 			}
 			if _, err := conn.Exec(billiardEntriesSchema); err != nil {
 				return fmt.Errorf("create billiard_entries: %w", err)
+			}
+			if err := createV4Indexes(conn); err != nil {
+				return err
 			}
 			return setUserVersion(conn, currentVersion)
 		}
@@ -104,6 +119,13 @@ func migrate(conn *sql.DB, backupDir string, hadTablesBefore bool) error {
 			return err
 		}
 		version = 3
+	}
+
+	if version == 3 {
+		if err := migrateV3ToV4(conn); err != nil {
+			return err
+		}
+		version = 4
 	}
 
 	if version != currentVersion {
@@ -180,6 +202,47 @@ func migrateV2ToV3(conn *sql.DB) error {
 		return fmt.Errorf("create billiard_entries: %w", err)
 	}
 	if err := setUserVersion(tx, 3); err != nil {
+		return fmt.Errorf("set user_version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+// v4Indexes speed up what the app does constantly: totals, lists and the
+// chart over a date range (sales by created_at), joining a sale to its
+// stock movements, and the product list (archived filter, ordered by name).
+// products(sku) is not indexed: its UNIQUE constraint already is.
+var v4Indexes = []string{
+	`CREATE INDEX IF NOT EXISTS idx_products_archived_name ON products(archived, name)`,
+	`CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_sales_product_created ON sales(product_id, created_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_stock_movements_sale ON stock_movements(sale_id)`,
+}
+
+func createV4Indexes(e execer) error {
+	for _, stmt := range v4Indexes {
+		if _, err := e.Exec(stmt); err != nil {
+			return fmt.Errorf("create index: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV3ToV4 adds the indexes in v4Indexes. They are IF NOT EXISTS, so
+// running the step twice is harmless.
+func migrateV3ToV4(conn *sql.DB) error {
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op if committed
+
+	if err := createV4Indexes(tx); err != nil {
+		return err
+	}
+	if err := setUserVersion(tx, 4); err != nil {
 		return fmt.Errorf("set user_version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

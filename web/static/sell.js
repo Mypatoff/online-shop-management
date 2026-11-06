@@ -44,7 +44,7 @@ sellBtn.onclick = function () {
 		body: JSON.stringify({ product_id: selected.id, quantity: quantity }),
 	})
 		.then(function (res) {
-			showToast("Sold " + quantity + " x " + selected.name + ", " + res.stock + " left");
+			showToast(t("sell.sold", { qty: quantity, name: selected.name, left: res.stock }));
 			updateProductStock(selected.id, res.stock);
 			selectProduct(selected);
 			loadRecentSales();
@@ -90,7 +90,7 @@ function renderResults(query) {
 		btn.type = "button";
 		btn.className = "sell-result-btn";
 		btn.disabled = p.stock <= 0;
-		btn.textContent = p.name + (p.sku ? " (" + p.sku + ")" : "") + " — " + formatMoney(p.price) + " — " + p.stock + " in stock";
+		btn.textContent = p.name + (p.sku ? " (" + p.sku + ")" : "") + " — " + formatMoney(p.price) + " — " + t("sell.in_stock", { n: p.stock });
 		btn.onclick = function () {
 			selectProduct(p);
 		};
@@ -107,7 +107,7 @@ function selectProduct(p) {
 
 	selectedPanel.classList.remove("hidden");
 	selectedNameEl.textContent = selected.name;
-	selectedPriceEl.textContent = formatMoney(selected.price) + " each";
+	selectedPriceEl.textContent = t("sell.each", { v: formatMoney(selected.price) });
 	sellErrorEl.textContent = "";
 
 	var clamped = Math.min(Math.max(currentQuantity() || 1, 1), Math.max(selected.stock, 0));
@@ -164,7 +164,7 @@ function renderRecentSales(sales) {
 		var li = document.createElement("li");
 		li.className = "recent-sale-row" + (sale.voided ? " voided-row" : "");
 		li.textContent =
-			formatLocalTime(sale.created_at) + " — " + sale.quantity + " x " + sale.product_name + " — " + formatMoney(sale.total) + (sale.voided ? " (voided)" : "");
+			formatLocalTime(sale.created_at) + " — " + sale.quantity + " x " + sale.product_name + " — " + formatMoney(sale.total) + (sale.voided ? " (" + t("common.voided_lower") + ")" : "");
 		list.appendChild(li);
 	});
 }

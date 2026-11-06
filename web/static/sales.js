@@ -88,8 +88,11 @@ function renderTotals(totals, billiard) {
 	document.getElementById("day-units").textContent = totals.units;
 	document.getElementById("day-count").textContent = totals.sale_count;
 	document.getElementById("day-billiard-revenue").textContent = formatMoney(billiard.revenue);
-	document.getElementById("day-total-revenue-line").textContent =
-		"Total revenue: " + formatMoney(totals.total_revenue) + " (shop " + formatMoney(totals.revenue) + " + billiard " + formatMoney(billiard.revenue) + ")";
+	document.getElementById("day-total-revenue-line").textContent = t("sales.total_line", {
+		total: formatMoney(totals.total_revenue),
+		shop: formatMoney(totals.revenue),
+		billiard: formatMoney(billiard.revenue),
+	});
 }
 
 function renderBilliardDay(billiard) {
@@ -115,7 +118,7 @@ function renderBilliardDay(billiard) {
 		addCell(tr, entry.minutes != null ? String(entry.minutes) : "—");
 		addCell(tr, entry.note || "—");
 		addCell(tr, formatMoney(entry.amount));
-		addCell(tr, entry.voided ? "Voided" : "Completed");
+		addCell(tr, entry.voided ? t("common.voided") : t("common.completed"));
 		tbody.appendChild(tr);
 	});
 }
@@ -171,7 +174,7 @@ function buildSaleRow(sale) {
 	addCell(tr, sale.quantity);
 	addCell(tr, formatMoney(sale.unit_price));
 	addCell(tr, formatMoney(sale.total));
-	addCell(tr, sale.voided ? "Voided" : "Completed");
+	addCell(tr, sale.voided ? t("common.voided") : t("common.completed"));
 
 	var actionsTd = document.createElement("td");
 	actionsTd.className = "row-actions";
@@ -179,23 +182,23 @@ function buildSaleRow(sale) {
 		var voidBtn = document.createElement("button");
 		voidBtn.type = "button";
 		voidBtn.className = "btn btn-secondary btn-small";
-		voidBtn.textContent = "Void";
+		voidBtn.textContent = t("common.void");
 		voidBtn.onclick = function () {
-			if (!confirm("Void this sale? This restores the stock it used.")) return;
-			apiFetch("/api/sales/" + sale.id + "/void", { method: "POST", body: "{}" })
-				.then(function () {
-					loadDay(currentDate);
-				})
-				.catch(function (err) {
-					alert(err.message);
-				});
+			confirmDialog(t("sales.void_confirm"), { title: t("sales.void_title"), confirmLabel: t("common.void") }).then(function (ok) {
+				if (!ok) return;
+				apiFetch("/api/sales/" + sale.id + "/void", { method: "POST", body: "{}" })
+					.then(function () {
+						loadDay(currentDate);
+					})
+					.catch(showError);
+			});
 		};
 		actionsTd.appendChild(voidBtn);
 
 		var receiptBtn = document.createElement("button");
 		receiptBtn.type = "button";
 		receiptBtn.className = "btn btn-secondary btn-small";
-		receiptBtn.textContent = "Receipt";
+		receiptBtn.textContent = t("common.receipt");
 		receiptBtn.onclick = function () {
 			printReceipt(sale);
 		};
@@ -223,41 +226,41 @@ function buildDailyReport(data) {
 	var shopName = (window.appConfig && window.appConfig.shop_name) || "ShopKeeper";
 
 	appendHeading(container, "h1", shopName);
-	appendParagraph(container, "Daily sales report — " + data.date);
-	appendParagraph(container, "Printed at " + new Date().toLocaleString());
+	appendParagraph(container, t("report.title", { date: formatDateDisplay(data.date) }));
+	appendParagraph(container, t("report.printed_at", { time: new Date().toLocaleString(localeTag()) }));
 
 	var totalsList = document.createElement("ul");
-	appendListItem(totalsList, "Revenue: " + formatMoney(data.totals.revenue));
-	appendListItem(totalsList, "Units sold: " + data.totals.units);
-	appendListItem(totalsList, "Sales: " + data.totals.sale_count);
-	appendListItem(totalsList, "Billiard revenue: " + formatMoney(data.billiard.revenue));
-	appendListItem(totalsList, "Total revenue: shop + billiard = " + formatMoney(data.totals.total_revenue));
+	appendListItem(totalsList, t("report.revenue", { v: formatMoney(data.totals.revenue) }));
+	appendListItem(totalsList, t("report.units_sold", { v: data.totals.units }));
+	appendListItem(totalsList, t("report.sales", { v: data.totals.sale_count }));
+	appendListItem(totalsList, t("report.billiard_revenue", { v: formatMoney(data.billiard.revenue) }));
+	appendListItem(totalsList, t("report.total_revenue", { v: formatMoney(data.totals.total_revenue) }));
 	container.appendChild(totalsList);
 
 	if (data.totals.voided_count > 0) {
-		appendParagraph(container, data.totals.voided_count + " voided sale" + (data.totals.voided_count === 1 ? "" : "s") + " not counted.");
+		appendParagraph(container, t("report.voided_sales", { n: data.totals.voided_count }));
 	}
 	var voidedBilliardCount = data.billiard.entries.filter(function (e) {
 		return e.voided;
 	}).length;
 	if (voidedBilliardCount > 0) {
-		appendParagraph(container, voidedBilliardCount + " voided billiard entr" + (voidedBilliardCount === 1 ? "y" : "ies") + " not counted.");
+		appendParagraph(container, t("report.voided_billiard", { n: voidedBilliardCount }));
 	}
 
-	appendHeading(container, "h2", "By product");
+	appendHeading(container, "h2", t("sales.by_product"));
 	container.appendChild(
 		buildReportTable(
-			["Product", "Units", "Revenue"],
+			[t("sales.col_product"), t("sales.col_units"), t("sales.col_revenue")],
 			data.by_product.map(function (item) {
 				return [item.name, String(item.units), formatMoney(item.revenue)];
 			})
 		)
 	);
 
-	appendHeading(container, "h2", "Sales");
+	appendHeading(container, "h2", t("sales.sales"));
 	container.appendChild(
 		buildReportTable(
-			["Time", "Product", "Qty", "Unit price", "Total", "Status"],
+			[t("common.time"), t("sales.col_product"), t("sales.col_qty"), t("sales.col_unit_price"), t("sales.col_total"), t("common.status")],
 			data.sales.map(function (sale) {
 				return [
 					formatTimeOfDay(sale.created_at),
@@ -265,16 +268,16 @@ function buildDailyReport(data) {
 					String(sale.quantity),
 					formatMoney(sale.unit_price),
 					formatMoney(sale.total),
-					sale.voided ? "Voided" : "Completed",
+					sale.voided ? t("common.voided") : t("common.completed"),
 				];
 			})
 		)
 	);
 
-	appendHeading(container, "h2", "Billiard");
+	appendHeading(container, "h2", t("nav.billiard"));
 	container.appendChild(
 		buildReportTable(
-			["Time", "Table", "Minutes", "Note", "Amount", "Status"],
+			[t("common.time"), t("billiard.col_table"), t("billiard.col_minutes"), t("billiard.col_note"), t("billiard.col_amount"), t("common.status")],
 			data.billiard.entries.map(function (entry) {
 				return [
 					formatTimeOfDay(entry.created_at),
@@ -282,7 +285,7 @@ function buildDailyReport(data) {
 					entry.minutes != null ? String(entry.minutes) : "—",
 					entry.note || "—",
 					formatMoney(entry.amount),
-					entry.voided ? "Voided" : "Completed",
+					entry.voided ? t("common.voided") : t("common.completed"),
 				];
 			})
 		)
@@ -348,12 +351,12 @@ function printReceipt(sale) {
 	var shopName = (window.appConfig && window.appConfig.shop_name) || "ShopKeeper";
 
 	appendParagraph(container, shopName);
-	appendParagraph(container, new Date(sale.created_at * 1000).toLocaleString());
+	appendParagraph(container, formatLocalTime(sale.created_at));
 	appendParagraph(container, sale.product_name);
-	appendParagraph(container, "Qty: " + sale.quantity);
-	appendParagraph(container, "Unit price: " + formatMoney(sale.unit_price));
-	appendParagraph(container, "Total: " + formatMoney(sale.total));
-	appendParagraph(container, "Thank you");
+	appendParagraph(container, t("receipt.qty", { v: sale.quantity }));
+	appendParagraph(container, t("receipt.unit_price", { v: formatMoney(sale.unit_price) }));
+	appendParagraph(container, t("receipt.total", { v: formatMoney(sale.total) }));
+	appendParagraph(container, t("receipt.thanks"));
 
 	var style = document.createElement("style");
 	style.id = "receipt-page";

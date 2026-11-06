@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ShopKeeper
+GenericName=Shop management
+GenericName[ru]=Управление магазином
+GenericName[uz]=Do'kon boshqaruvi
+Comment=Products, sales, stock and billiard takings for a small shop
+Comment[ru]=Товары, продажи, склад и выручка бильярда для небольшого магазина
+Comment[uz]=Kichik do'kon uchun mahsulotlar, sotuvlar, ombor va bilyard tushumi
+Exec=@EXEC@
+Icon=shopkeeper
+Terminal=false
+Categories=Office;Finance;
+Keywords=shop;sales;stock;inventory;billiard;
+StartupNotify=false

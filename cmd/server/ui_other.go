@@ -20,7 +20,28 @@ func showWindow(string, <-chan struct{}) error {
 
 func focusExisting() bool { return false }
 
-func setupLogging(string) {}
+// setupLogging moves the log into shop.log when the app was started without a
+// terminal, e.g. from a desktop launcher, where stderr goes nowhere. Started
+// from a terminal it keeps logging there.
+func setupLogging(dir string) {
+	if isTerminal(os.Stdin) || isTerminal(os.Stderr) {
+		return
+	}
+	logToFile(dir)
+}
+
+// isTerminal reports whether f is a terminal. /dev/null is a character device
+// too, but it is what a launcher gives a program, so it does not count.
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	if null, err := os.Stat(os.DevNull); err == nil && os.SameFile(info, null) {
+		return false
+	}
+	return true
+}
 
 // reportFatal tells the user why the app could not start, and keeps a
 // double-clicked terminal window open long enough to read it.

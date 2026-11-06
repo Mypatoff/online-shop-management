@@ -4,11 +4,16 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
+// instanceID tells one run of the program from the next. The page compares it before and
+// after a restore to know the app really restarted (the version does not change then).
+var instanceID = strconv.FormatInt(time.Now().UnixNano(), 10)
+
 func (a *API) handleVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"version": a.updater.Current})
+	writeJSON(w, http.StatusOK, map[string]string{"version": a.updater.Current, "instance": instanceID})
 }
 
 // handleUpdateCheck asks GitHub whether a newer release exists. It needs the internet, so a

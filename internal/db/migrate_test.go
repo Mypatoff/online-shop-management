@@ -332,3 +332,173 @@ func TestNewDatabaseSkipsMigrationAndBackup(t *testing.T) {
 		t.Fatalf("backup dir should be empty for a brand-new database, got %v", entries)
 	}
 }
+
+// makeV3SchemaDB creates a database file at user_version 3: everything but
+// the v4 indexes, with a sale and a stock movement to carry across.
+func makeV3SchemaDB(t *testing.T, path string) {
+	t.Helper()
+	conn, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open v3-schema db: %v", err)
+	}
+	defer conn.Close()
+
+	for _, stmt := range []string{
+		oldSchemaProductsAndSales,
+		// The pre-v4 versions of these two, without the indexes added later.
+		`CREATE TABLE stock_movements (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			product_id INTEGER NOT NULL REFERENCES products(id),
+			type TEXT NOT NULL CHECK (type IN ('initial', 'sale', 'void', 'adjust')),
+			delta INTEGER NOT NULL, stock_after INTEGER NOT NULL,
+			reason TEXT, note TEXT, sale_id INTEGER REFERENCES sales(id),
+			created_at INTEGER NOT NULL)`,
+		`CREATE TABLE billiard_entries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			amount INTEGER NOT NULL CHECK (amount > 0),
+			table_name TEXT, minutes INTEGER, note TEXT,
+			created_at INTEGER NOT NULL, voided_at INTEGER)`,
+		`CREATE INDEX idx_stock_movements_product_created ON stock_movements(product_id, created_at)`,
+		`CREATE INDEX idx_billiard_entries_created ON billiard_entries(created_at)`,
+		`INSERT INTO products (name, sku, price, stock, low_stock_threshold, archived, created_at, updated_at)
+		 VALUES ('Cola', NULL, 150, 9, 5, 0, 1000, 1000)`,
+		`INSERT INTO sales (product_id, product_name, quantity, unit_price, total, created_at)
+		 VALUES (1, 'Cola', 1, 150, 150, 2000)`,
+		`INSERT INTO stock_movements (product_id, type, delta, stock_after, sale_id, created_at)
+		 VALUES (1, 'sale', -1, 9, 1, 2000)`,
+		`PRAGMA user_version = 3`,
+	} {
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatalf("seed v3 db (%.40s...): %v", stmt, err)
+		}
+	}
+}
+
+func indexNames(t *testing.T, conn *sql.DB) map[string]bool {
+	t.Helper()
+	rows, err := conn.Query(`SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'`)
+	if err != nil {
+		t.Fatalf("list indexes: %v", err)
+	}
+	defer rows.Close()
+	names := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatalf("scan index name: %v", err)
+		}
+		names[n] = true
+	}
+	return names
+}
+
+var wantV4Indexes = []string{
+	"idx_products_archived_name",
+	"idx_sales_created",
+	"idx_sales_product_created",
+	"idx_stock_movements_sale",
+	"idx_stock_movements_product_created",
+	"idx_billiard_entries_created",
+}
+
+func TestMigrateV3ToV4AddsIndexesBacksUpAndKeepsData(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shop.db")
+	backupDir := filepath.Join(dir, "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	makeV3SchemaDB(t, dbPath)
+
+	conn, err := Open(dbPath, backupDir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer conn.Close()
+
+	var version int
+	if err := conn.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 4 {
+		t.Fatalf("user_version = %d, want 4", version)
+	}
+
+	got := indexNames(t, conn)
+	for _, name := range wantV4Indexes {
+		if !got[name] {
+			t.Errorf("index %s missing after migration; have %v", name, got)
+		}
+	}
+
+	var products, sales, movements int
+	if err := conn.QueryRow(`SELECT (SELECT count(*) FROM products), (SELECT count(*) FROM sales), (SELECT count(*) FROM stock_movements)`).
+		Scan(&products, &sales, &movements); err != nil {
+		t.Fatal(err)
+	}
+	if products != 1 || sales != 1 || movements != 1 {
+		t.Fatalf("rows after migration: products=%d sales=%d movements=%d, want 1 each", products, sales, movements)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("backups after migrating an existing database = %v, want exactly one pre-migration backup", entries)
+	}
+}
+
+func TestMigrateV3ToV4IsRepeatable(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shop.db")
+	makeV3SchemaDB(t, dbPath)
+
+	conn, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// Run the step twice, as if it had been interrupted after the indexes were
+	// created but before user_version was recorded.
+	for i := 0; i < 2; i++ {
+		if err := migrateV3ToV4(conn); err != nil {
+			t.Fatalf("migrateV3ToV4 run %d: %v", i+1, err)
+		}
+	}
+}
+
+func TestNewDatabaseHasV4Indexes(t *testing.T) {
+	dir := t.TempDir()
+	conn, err := Open(filepath.Join(dir, "shop.db"), filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer conn.Close()
+
+	got := indexNames(t, conn)
+	for _, name := range wantV4Indexes {
+		if !got[name] {
+			t.Errorf("index %s missing on a brand-new database; have %v", name, got)
+		}
+	}
+}
+
+func TestOpenRefusesNewerSchema(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shop.db")
+	conn, err := Open(dbPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(`PRAGMA user_version = 99`); err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
+
+	if conn, err := Open(dbPath, filepath.Join(dir, "backups")); err == nil {
+		conn.Close()
+		t.Fatal("Open succeeded on a database from a newer version, want an error")
+	}
+}

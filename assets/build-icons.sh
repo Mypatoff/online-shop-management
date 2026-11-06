@@ -4,6 +4,7 @@
 #   assets/icon.ico                      installer, shortcuts, and the window/taskbar icon
 #   cmd/server/icon_windows.ico          copy embedded in the exe (go:embed)
 #   web/static/icon.svg, favicon.ico     browser tab
+#   assets/icon-48.png, icon-256.png     the Linux package's menu icon (packaging/linux)
 #
 #   cmd/server/rsrc_windows_amd64.syso   the exe's own icon in Explorer (go build links it)
 #
@@ -28,6 +29,8 @@ big.save("assets/icon.ico", format="ICO", sizes=[(s, s) for s in sizes])
 big.save("web/static/favicon.ico", format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
 PY
 
+cp "$tmp/48.png" assets/icon-48.png
+cp "$tmp/256.png" assets/icon-256.png
 cp assets/icon.svg web/static/icon.svg
 cp assets/icon.ico cmd/server/icon_windows.ico
 

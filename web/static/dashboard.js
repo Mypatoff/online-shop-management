@@ -12,7 +12,7 @@ function renderSummary(summary) {
 	document.getElementById("stat-units").textContent = summary.units_in_stock;
 	document.getElementById("stat-stock-value").textContent = formatMoney(summary.stock_value);
 	document.getElementById("stat-revenue").textContent = formatMoney(summary.total_revenue_today);
-	document.getElementById("stat-revenue-breakdown").textContent = "Shop " + formatMoney(summary.today_revenue) + " + Billiard " + formatMoney(summary.billiard_revenue_today);
+	document.getElementById("stat-revenue-breakdown").textContent = t("dashboard.breakdown", { shop: formatMoney(summary.today_revenue), billiard: formatMoney(summary.billiard_revenue_today) });
 	document.getElementById("stat-sales").textContent = summary.today_sale_count;
 	document.getElementById("stat-billiard").textContent = summary.billiard_count_today;
 
@@ -35,13 +35,13 @@ function renderLowStock(items) {
 		li.className = "low-stock-row";
 
 		var info = document.createElement("span");
-		info.textContent = item.name + " — " + item.stock + " left (threshold " + item.low_stock_threshold + ")";
+		info.textContent = item.name + " — " + t("dashboard.low_row", { stock: item.stock, threshold: item.low_stock_threshold });
 		li.appendChild(info);
 
 		var btn = document.createElement("button");
 		btn.type = "button";
 		btn.className = "btn btn-secondary btn-small";
-		btn.textContent = "Adjust";
+		btn.textContent = t("products.adjust");
 		btn.onclick = function () {
 			openAdjustStockModal(item, function () {
 				loadSummary();
@@ -108,7 +108,7 @@ function setActiveSegment(group, btn) {
 function loadChart() {
 	var status = document.getElementById("chart-status");
 	var container = document.getElementById("chart-container");
-	status.textContent = "Loading chart...";
+	status.textContent = t("dashboard.chart_loading");
 	status.classList.remove("hidden");
 	container.classList.add("hidden");
 
@@ -124,7 +124,7 @@ function loadChart() {
 
 function showChartError(err) {
 	var status = document.getElementById("chart-status");
-	status.textContent = "Could not load chart: " + (err && err.message ? err.message : "unknown error");
+	status.textContent = t("dashboard.chart_error", { msg: err && err.message ? err.message : t("error.unknown") });
 	status.classList.remove("hidden");
 	document.getElementById("chart-container").classList.add("hidden");
 	console.error(err);
@@ -306,7 +306,7 @@ function renderChart() {
 		emptyLabel.setAttribute("y", marginTop + plotHeight / 2);
 		emptyLabel.setAttribute("text-anchor", "middle");
 		emptyLabel.setAttribute("class", "chart-empty-label");
-		emptyLabel.textContent = "No sales yet in this period";
+		emptyLabel.textContent = t("dashboard.chart_empty");
 		svg.appendChild(emptyLabel);
 	}
 
@@ -339,10 +339,10 @@ function buildAxisUnitLabel(metric) {
 	var label = document.createElement("div");
 	label.className = "chart-axis-unit-label";
 	if (metric === "units") {
-		label.textContent = "Units";
+		label.textContent = t("dashboard.units");
 	} else {
 		var currency = (window.appConfig && window.appConfig.currency) || "";
-		label.textContent = currency ? "Revenue, " + currency : "Revenue";
+		label.textContent = currency ? t("dashboard.revenue_currency", { currency: currency }) : t("dashboard.revenue");
 	}
 	return label;
 }
@@ -362,6 +362,7 @@ function compactAxisLabel(amount) {
 function compactNumber(value) {
 	var negative = value < 0;
 	var abs = Math.abs(value);
+	var dec = numberSeparators().decimal;
 	var text;
 
 	if (abs < 1000) {
@@ -373,7 +374,7 @@ function compactNumber(value) {
 			thousands += 1;
 			tenthsOfK = 0;
 		}
-		text = tenthsOfK === 0 ? thousands + "k" : thousands + "." + tenthsOfK + "k";
+		text = (tenthsOfK === 0 ? thousands : thousands + dec + tenthsOfK) + t("num.k");
 	} else {
 		var millions = Math.floor(abs / 1000000);
 		var tenthsOfM = Math.floor(((abs - millions * 1000000) + 50000) / 100000);
@@ -381,7 +382,7 @@ function compactNumber(value) {
 			millions += 1;
 			tenthsOfM = 0;
 		}
-		text = tenthsOfM === 0 ? millions + "M" : millions + "." + tenthsOfM + "M";
+		text = (tenthsOfM === 0 ? millions : millions + dec + tenthsOfM) + t("num.m");
 	}
 	return (negative ? "-" : "") + text;
 }
@@ -407,31 +408,24 @@ function parseLocalDate(dateStr) {
 
 function shortDateLabel(dateStr) {
 	var d = parseLocalDate(dateStr);
-	return d.toLocaleDateString(undefined, { weekday: "short" }) + " " + d.getDate();
+	return d.toLocaleDateString(localeTag(), { weekday: "short" }) + " " + d.getDate();
 }
 
 function fullDateLabel(dateStr) {
 	var d = parseLocalDate(dateStr);
-	return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+	return d.toLocaleDateString(localeTag(), { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
 function barAriaLabel(entry, metric) {
 	if (metric === "units") {
-		return (
-			fullDateLabel(entry.date) + ", " + entry.units + " units, " + entry.sale_count + " sale" + (entry.sale_count === 1 ? "" : "s") + ". Opens that day on the Sales page."
-		);
+		return t("chart.bar_units", { date: fullDateLabel(entry.date), units: entry.units, sales: entry.sale_count });
 	}
-	var total = entry.revenue + entry.billiard_revenue;
-	return (
-		fullDateLabel(entry.date) +
-		", total " +
-		formatMoney(total) +
-		" (shop " +
-		formatMoney(entry.revenue) +
-		", billiard " +
-		formatMoney(entry.billiard_revenue) +
-		"). Opens that day on the Sales page."
-	);
+	return t("chart.bar_revenue", {
+		date: fullDateLabel(entry.date),
+		total: formatMoney(entry.revenue + entry.billiard_revenue),
+		shop: formatMoney(entry.revenue),
+		billiard: formatMoney(entry.billiard_revenue),
+	});
 }
 
 function buildAriaSummary(data, metric) {
@@ -446,8 +440,8 @@ function buildAriaSummary(data, metric) {
 				bestIndex = i;
 			}
 		});
-		var unitsDetail = bestUnits > 0 ? "best day was " + fullDateLabel(data[bestIndex].date) + " with " + data[bestIndex].units + " units" : "no sales in this period";
-		return "Daily sales chart showing units sold for the last " + data.length + " days. Total " + totalUnits + " units; " + unitsDetail + ".";
+		var unitsDetail = bestUnits > 0 ? t("chart.best_units", { date: fullDateLabel(data[bestIndex].date), units: data[bestIndex].units }) : t("chart.none");
+		return t("chart.summary_units", { days: data.length, total: totalUnits, detail: unitsDetail });
 	}
 
 	var totalShop = 0;
@@ -466,21 +460,20 @@ function buildAriaSummary(data, metric) {
 	var best = data[bestIndex2];
 	var detail =
 		bestCombined > 0
-			? "best day was " + fullDateLabel(best.date) + " with " + formatMoney(bestCombined) + " (shop " + formatMoney(best.revenue) + " plus billiard " + formatMoney(best.billiard_revenue) + ")"
-			: "no sales in this period";
-	return (
-		"Daily sales chart showing revenue for the last " +
-		data.length +
-		" days. Total " +
-		formatMoney(totalShop + totalBilliard) +
-		" (shop " +
-		formatMoney(totalShop) +
-		" plus billiard " +
-		formatMoney(totalBilliard) +
-		"); " +
-		detail +
-		"."
-	);
+			? t("chart.best_revenue", {
+					date: fullDateLabel(best.date),
+					total: formatMoney(bestCombined),
+					shop: formatMoney(best.revenue),
+					billiard: formatMoney(best.billiard_revenue),
+				})
+			: t("chart.none");
+	return t("chart.summary_revenue", {
+		days: data.length,
+		total: formatMoney(totalShop + totalBilliard),
+		shop: formatMoney(totalShop),
+		billiard: formatMoney(totalBilliard),
+		detail: detail,
+	});
 }
 
 function navigateToDate(dateStr) {
@@ -539,11 +532,11 @@ function showTooltip(entry, rect) {
 	tooltip.textContent = "";
 	[
 		fullDateLabel(entry.date),
-		"Shop: " + formatMoney(entry.revenue),
-		"Billiard: " + formatMoney(entry.billiard_revenue),
-		"Total: " + formatMoney(entry.revenue + entry.billiard_revenue),
-		"Units: " + entry.units,
-		"Sales: " + entry.sale_count,
+		t("chart.tip_shop", { v: formatMoney(entry.revenue) }),
+		t("chart.tip_billiard", { v: formatMoney(entry.billiard_revenue) }),
+		t("chart.tip_total", { v: formatMoney(entry.revenue + entry.billiard_revenue) }),
+		t("chart.tip_units", { v: entry.units }),
+		t("chart.tip_sales", { v: entry.sale_count }),
 	].forEach(function (text) {
 		var line = document.createElement("div");
 		line.textContent = text;
@@ -571,12 +564,12 @@ function buildFallbackTable(data) {
 
 	var table = document.createElement("table");
 	var caption = document.createElement("caption");
-	caption.textContent = "Daily sales data";
+	caption.textContent = t("chart.table_caption");
 	table.appendChild(caption);
 
 	var thead = document.createElement("thead");
 	var headRow = document.createElement("tr");
-	["Date", "Shop revenue", "Billiard revenue", "Total revenue", "Units", "Sales"].forEach(function (text) {
+	[t("common.date"), t("chart.col_shop"), t("chart.col_billiard"), t("chart.col_total"), t("dashboard.units"), t("sales.sales")].forEach(function (text) {
 		var th = document.createElement("th");
 		th.textContent = text;
 		headRow.appendChild(th);

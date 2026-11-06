@@ -33,6 +33,7 @@ All optional:
 | `BACKUP_DIR` | `backups` folder next to the database file | Where automatic daily backups are written |
 | `BACKUP_KEEP_DAYS` | `30` | How many days of daily backups to keep before they're rotated out |
 | `NO_BROWSER` | unset | Set to `1` to stop the app from opening your browser on startup |
+| `SHOP_LANG` | `en` (or the language of `LANG`, if it is `uz`/`ru`/`en`) | Default interface language: `en`, `uz` or `ru` |
 
 ## Currency
 
@@ -55,6 +56,21 @@ in that case (and under `go run` only) it falls back to the previous
 behavior of `./shop.db` in whatever directory you ran it from. Set
 `DB_PATH` to override either way.
 
+## Language
+
+The interface, printed reports and receipts are available in **English,
+Uzbek (Latin) and Russian**. Pick one with the language switch in the
+top bar: it is remembered in the browser/window. `SHOP_LANG` (or, if
+that is not set, a `LANG` such as `uz_UZ.UTF-8`) sets the language
+shown until someone picks one. Numbers and dates follow the language
+(`150 000 so'm` and `05.10.2026` in Uzbek and Russian, `150,000 so'm`
+in English).
+
+Messages that come from the server itself (for example a rejected
+value) are still in English. The translations live in
+`internal/i18n/{en,uz,ru}.json`; a test fails if a language is missing
+a key or a page uses a key that does not exist.
+
 ## Desktop app
 
 Build the binaries for Windows and Linux:
@@ -63,7 +79,8 @@ Build the binaries for Windows and Linux:
 ./build.sh   # or build.bat on Windows
 ```
 
-This produces `dist/ShopKeeper.exe` and `dist/shopkeeper-linux`.
+This produces `dist/ShopKeeper.exe` and `dist/shopkeeper-linux` and (from
+`build.sh`) `dist/ShopKeeper-linux.tar.gz`, the Linux package.
 
 **Windows: its own window.** `ShopKeeper.exe` shows the app in a native
 window (title bar, taskbar icon, no address bar, no tabs, no console).
@@ -84,8 +101,21 @@ internet.
 - **`NO_BROWSER=1`** runs the server with no window at all (scripted
   or headless use).
 
-**Linux:** `shopkeeper-linux` runs in the terminal and opens your
-browser; closing the terminal (or Ctrl-C) stops it.
+**Linux:** the app opens in your browser. Run `shopkeeper-linux` from a
+terminal (Ctrl-C stops it), or install it with a menu entry and icon:
+
+```sh
+tar xzf ShopKeeper-linux.tar.gz && cd ShopKeeper-linux && ./install.sh
+```
+
+This installs for your user only (no root) into
+`~/.local/share/shopkeeper/`, with its data (`shop.db`, `backups/`)
+beside the program, adds a "ShopKeeper" entry to the application menu
+and a `shopkeeper` command. Started from the menu it runs with no
+terminal and logs to `shop.log`; closing the browser tab does not stop
+it (starting it again just opens the page), the **Quit** button in the
+top bar does. `./uninstall.sh` removes the program and keeps your data;
+`./uninstall.sh --purge` deletes that too.
 
 **Installer (Windows).** To build `dist/ShopKeeper-Setup.exe` (needs
 [Inno Setup 6](https://jrsoftware.org/isdl.php)):
@@ -132,6 +162,12 @@ still works without internet.
   Pushing a `v*` tag does this in the release workflow and publishes the files
   the updater needs.
 
+## Continuous integration
+
+Every push and pull request runs `gofmt`, `go vet`, the tests (on Linux and
+Windows) and a cross-build (`.github/workflows/ci.yml`). A `v*` tag builds and
+publishes the release (`.github/workflows/release.yml`).
+
 ## Icon
 
 The icon is `assets/icon.svg`. `assets/build-icons.sh` regenerates the
@@ -162,20 +198,25 @@ Backups live in `BACKUP_DIR` (default: a `backups` folder next to the
 database file). The absolute path is printed at startup. Backups older
 than `BACKUP_KEEP_DAYS` (default 30) are deleted after each backup
 runs, whether `-start` or not. Files that don't match either pattern —
-including any `shop-premigration-*` files — are never touched by
-rotation.
+including any `shop-premigration-*`, `shop-prerestore-*` and the update's
+last backup — are never touched by rotation.
 
 Tip: point `BACKUP_DIR` at a USB drive or a cloud-synced folder (e.g.
 Dropbox/Google Drive/OneDrive) to automatically get an off-machine copy.
 
-**To restore from a backup:**
+### Restoring a backup
 
-1. Stop the app.
-2. Copy the backup file over `shop.db` (the path from `DB_PATH`, or
-   next to the executable by default).
-3. Delete `shop.db-wal` and `shop.db-shm` if they exist, next to
-   `shop.db`.
-4. Start the app again.
+Click **Restore** in the top bar. Choose one of the files in
+`backups/`, or upload a `.db` you downloaded earlier. The app checks
+the file (it must be a ShopKeeper database, pass SQLite's integrity
+check and not come from a newer version of the app), saves a copy of
+your current data as `shop-prerestore-*.db`, swaps the database in and
+restarts. A backup from an older version is upgraded on the next start.
+
+If you cannot start the app, restore by hand: stop it, copy the backup
+file over `shop.db` (the path from `DB_PATH`, or next to the executable
+by default), delete `shop.db-wal` and `shop.db-shm` if they exist, and
+start it again.
 
 ### On-demand backup
 

@@ -15,4 +15,7 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H=windowsgui $
 echo "Building dist/shopkeeper-linux (linux/amd64)..."
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w ${VERSION_FLAG}" -o dist/shopkeeper-linux ./cmd/server
 
-echo "Done. Binaries in dist/"
+echo "Packing dist/ShopKeeper-linux.tar.gz..."
+packaging/linux/make-tarball.sh dist/shopkeeper-linux dist/ShopKeeper-linux.tar.gz
+
+echo "Done. Files in dist/"

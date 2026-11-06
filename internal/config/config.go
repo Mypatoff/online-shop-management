@@ -18,11 +18,27 @@ type Config struct {
 	ShopName       string
 	BackupDir      string
 	BackupKeepDays int
+	Lang           string
 }
 
-// Load reads PORT, DB_PATH, CURRENCY, DECIMALS, SHOP_NAME, BACKUP_DIR
-// and BACKUP_KEEP_DAYS from the environment, applying defaults for
-// anything unset.
+// Languages are the UI languages the app has translations for.
+var Languages = []string{"en", "uz", "ru"}
+
+// langFromLocale maps a locale like "uz_UZ.UTF-8" or "ru-RU" to a supported
+// language code, or "" if it is none of them.
+func langFromLocale(locale string) string {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+	for _, l := range Languages {
+		if locale == l || strings.HasPrefix(locale, l+"_") || strings.HasPrefix(locale, l+"-") || strings.HasPrefix(locale, l+".") {
+			return l
+		}
+	}
+	return ""
+}
+
+// Load reads PORT, DB_PATH, CURRENCY, DECIMALS, SHOP_NAME, BACKUP_DIR,
+// BACKUP_KEEP_DAYS and SHOP_LANG (or LANG) from the environment, applying
+// defaults for anything unset.
 func Load() (Config, error) {
 	cfg := Config{
 		Port:           8080,
@@ -31,6 +47,20 @@ func Load() (Config, error) {
 		Decimals:       0,
 		ShopName:       "ShopKeeper",
 		BackupKeepDays: 30,
+		Lang:           "en",
+	}
+
+	// SHOP_LANG is explicit, so a typo is an error. LANG is whatever the
+	// system has set (often en_US.UTF-8 or C), so anything unsupported there
+	// is ignored rather than refused.
+	if v := os.Getenv("SHOP_LANG"); v != "" {
+		l := langFromLocale(v)
+		if l == "" {
+			return Config{}, fmt.Errorf("SHOP_LANG must be one of %s, got %q", strings.Join(Languages, ", "), v)
+		}
+		cfg.Lang = l
+	} else if l := langFromLocale(os.Getenv("LANG")); l != "" {
+		cfg.Lang = l
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
