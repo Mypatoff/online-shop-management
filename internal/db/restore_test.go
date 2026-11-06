@@ -99,16 +99,15 @@ func TestApplyPendingRestoreDropsOldWAL(t *testing.T) {
 	if err := StageRestore(dbPath, backup); err != nil {
 		t.Fatal(err)
 	}
-	// conn is still open and in WAL mode, so -wal exists with the "Old" row. If
-	// it survived the swap it would be replayed onto the restored file.
+	// The app has exited by the time a restore is applied. Close first: Windows
+	// will not let the sidecar files be written while the database maps them.
+	conn.Close()
+	// A leftover WAL from the old database must not survive the swap, or it
+	// would be replayed onto the restored file.
 	for _, ext := range []string{"-wal", "-shm"} {
 		if err := os.WriteFile(dbPath+ext, []byte("stale"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-	}
-	conn.Close()
-	if err := os.WriteFile(dbPath+"-wal", []byte("stale"), 0o644); err != nil {
-		t.Fatal(err)
 	}
 
 	if _, err := ApplyPendingRestore(dbPath); err != nil {

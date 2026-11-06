@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS sales (
 // exists, and runs any pending migrations (see migrate.go). backupDir
 // is where a safety backup is written before migrating an existing
 // database; it's unused for a brand-new database.
-func Open(path, backupDir string) (*sql.DB, error) {
+func Open(path, backupDir string) (_ *sql.DB, err error) {
 	// "_pragma" query params apply SQLite settings as each connection opens.
 	dsn := fmt.Sprintf(
 		"%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)",
@@ -48,7 +48,15 @@ func Open(path, backupDir string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	if err := conn.Ping(); err != nil {
+	// Every failure below must release the file: a caller that gets an error has
+	// no handle to close, and Windows will not delete or replace a file that is
+	// still open.
+	defer func() {
+		if err != nil {
+			conn.Close()
+		}
+	}()
+	if err = conn.Ping(); err != nil {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
 	// SQLite only allows one writer at a time; a single connection avoids
@@ -61,11 +69,11 @@ func Open(path, backupDir string) (*sql.DB, error) {
 		return nil, fmt.Errorf("check schema: %w", err)
 	}
 
-	if _, err := conn.Exec(baseSchema); err != nil {
+	if _, err = conn.Exec(baseSchema); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
-	if err := migrate(conn, backupDir, hadTables); err != nil {
+	if err = migrate(conn, backupDir, hadTables); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
