@@ -1,5 +1,5 @@
 @echo off
-rem Builds double-clickable ShopKeeper binaries for Windows and Linux into dist\.
+rem Builds ShopKeeper for Windows (a window, no console) and Linux (opens the browser) into dist\.
 setlocal
 cd /d "%~dp0"
 
@@ -10,7 +10,7 @@ set CGO_ENABLED=0
 echo Building dist\ShopKeeper.exe (windows/amd64)...
 set GOOS=windows
 set GOARCH=amd64
-go build -ldflags "-s -w" -o dist\ShopKeeper.exe .\cmd\server
+go build -ldflags "-s -w -H=windowsgui" -o dist\ShopKeeper.exe .\cmd\server
 if errorlevel 1 exit /b 1
 
 echo Building dist\shopkeeper-linux (linux/amd64)...

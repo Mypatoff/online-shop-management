@@ -1,7 +1,9 @@
 # shop
 
 Free online shop management app that works on localhost with a `.exe`
-or `.sh` file — no install, no internet connection required.
+or `.sh` file — no install, no internet connection required. On Windows
+it opens in its own window (no browser, no console); on Linux it opens
+your browser.
 
 ## Prerequisites
 
@@ -55,7 +57,7 @@ behavior of `./shop.db` in whatever directory you ran it from. Set
 
 ## Desktop app
 
-Build double-clickable binaries for Windows and Linux:
+Build the binaries for Windows and Linux:
 
 ```sh
 ./build.sh   # or build.bat on Windows
@@ -63,22 +65,46 @@ Build double-clickable binaries for Windows and Linux:
 
 This produces `dist/ShopKeeper.exe` and `dist/shopkeeper-linux`.
 
-**Installing:** put the exe in its own folder (e.g. `C:\ShopKeeper`) —
-`shop.db` and `backups/` will appear right beside it the first time you
-run it. Don't put it in `Downloads` or similar: that folder is just as
-good a home for its data as any other, but it's nicer to keep it
-somewhere dedicated.
+**Windows: its own window.** `ShopKeeper.exe` shows the app in a native
+window (title bar, taskbar icon, no address bar, no tabs, no console).
+It uses Microsoft's *Edge WebView2 Runtime* to draw the page, which
+Windows 11 and an updated Windows 10 already have; on a PC without it
+the app says so and shows where to get it (free, needs internet once).
+Everything the app needs at run time is on the PC: it works with no
+internet.
 
-**Desktop shortcut:** right-click `ShopKeeper.exe` → Send to → Desktop
-(create shortcut) on Windows, or right-click → Make Link on most Linux
-file managers. Double-clicking the shortcut starts the server and
-opens your browser to it automatically.
+- **Closing the window stops the app** (it takes one last backup
+  first). Start it again from the shortcut.
+- **Starting it twice** brings the first window to the front instead
+  of opening a second copy.
+- **Log:** with no console, the log is written to `shop.log` next to the
+  database (the previous one is kept as `shop.log.old` once it passes
+  2 MB). A start-up error (for example, the port is taken) is shown in a
+  message box.
+- **`NO_BROWSER=1`** runs the server with no window at all (scripted
+  or headless use).
 
-**Stopping it:** closing the console/terminal window that opens stops
-the app (it shuts down gracefully, taking one last backup first). If
-you start it a second time while it's already running, it just opens
-your browser to the existing instance instead of starting a second
-copy.
+**Linux:** `shopkeeper-linux` runs in the terminal and opens your
+browser; closing the terminal (or Ctrl-C) stops it.
+
+**Installer (Windows).** To build `dist/ShopKeeper-Setup.exe` (needs
+[Inno Setup 6](https://jrsoftware.org/isdl.php)):
+
+```powershell
+powershell -File installer\build-installer.ps1
+```
+
+It installs to `C:\ShopKeeper` (its data lives next to the program, so
+not Program Files), adds a Start menu entry and an optional desktop
+shortcut, and offers to start the app. Uninstalling removes only the
+program: `shop.db`, `backups\` and `shop.log` stay. To make the setup
+also work on a PC without WebView2 and without internet, see the top of
+`installer/ShopKeeper.iss`.
+
+**Without the installer:** put the exe in its own folder (e.g.
+`C:\ShopKeeper`) — `shop.db` and `backups/` appear right beside it the
+first time you run it. Right-click `ShopKeeper.exe` → Send to → Desktop
+(create shortcut) for a shortcut.
 
 **Moving existing data:** stop the app, copy your old `shop.db` into
 the new exe's folder, then start it again.

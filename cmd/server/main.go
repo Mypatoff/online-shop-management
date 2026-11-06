@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
 	"errors"
@@ -25,27 +24,8 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "ShopKeeper failed to start:")
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, "\nPress Enter to close this window (closing automatically in 20 seconds)...")
-		waitForEnterOrTimeout(20 * time.Second)
+		reportFatal(err)
 		os.Exit(1)
-	}
-}
-
-// waitForEnterOrTimeout blocks until stdin produces a line (the user
-// pressing Enter) or d elapses, whichever comes first - so a
-// double-clicked window showing a startup error stays on screen long
-// enough to be read instead of vanishing immediately.
-func waitForEnterOrTimeout(d time.Duration) {
-	enter := make(chan struct{})
-	go func() {
-		bufio.NewReader(os.Stdin).ReadString('\n') //nolint:errcheck // best effort; timeout covers a closed/absent stdin
-		close(enter)
-	}()
-	select {
-	case <-enter:
-	case <-time.After(d):
 	}
 }
 
@@ -53,6 +33,13 @@ func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
+	}
+
+	// The app shows its own window (Windows) unless NO_BROWSER is set; with
+	// no console, its log goes to a file.
+	windowMode := windowedUI && !noBrowser()
+	if windowMode {
+		setupLogging(filepath.Dir(cfg.DBPath))
 	}
 
 	if err := os.MkdirAll(cfg.BackupDir, 0o755); err != nil {
@@ -127,13 +114,14 @@ func run() error {
 			conn.Close()
 
 			if alreadyRunning(cfg.Port) {
-				openBrowser(fmt.Sprintf("http://localhost:%d", cfg.Port))
-				fmt.Printf("ShopKeeper is already running — opening your browser to http://localhost:%d\n", cfg.Port)
+				// Bring up the running copy's window; failing that, its page.
+				if !(windowMode && focusExisting()) {
+					openBrowser(fmt.Sprintf("http://localhost:%d", cfg.Port))
+				}
+				log.Printf("ShopKeeper is already running on port %d", cfg.Port)
 				os.Exit(0)
 			}
-			fmt.Printf("port %d is used by another program; set PORT=...\n", cfg.Port)
-			time.Sleep(10 * time.Second)
-			os.Exit(1)
+			return fmt.Errorf("port %d is used by another program; set PORT=... to use another", cfg.Port)
 		}
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
@@ -155,30 +143,62 @@ func run() error {
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(listener) }()
-	openBrowser(fmt.Sprintf("http://localhost:%d", cfg.Port))
+	url := fmt.Sprintf("http://localhost:%d", cfg.Port)
+	if !windowMode {
+		openBrowser(url)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	select {
-	case err := <-serveErr:
-		close(backupStop)
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("server: %w", err)
+	// Wait for whatever ends the app: the server failing, a stop signal, or
+	// (in window mode) the user closing the window.
+	var serverErr, uiErr error
+	if windowMode {
+		quit := make(chan struct{})
+		died := make(chan error, 1)
+		go func() {
+			select {
+			case err := <-serveErr:
+				died <- err
+			case <-ctx.Done():
+			}
+			close(quit) // closes the window
+		}()
+		uiErr = showWindow(url, quit) // returns when the window is gone
+		select {
+		case serverErr = <-died:
+		default:
 		}
-	case <-ctx.Done():
-		log.Print("shutting down...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		shutdownErr := srv.Shutdown(shutdownCtx)
-		close(backupStop)
-		<-backupDone
-		// Final backup after the server has stopped taking requests, but
-		// before conn.Close() runs via the deferred call above.
-		runBackup(conn, cfg.BackupDir, cfg.BackupKeepDays)
-		if shutdownErr != nil {
-			return fmt.Errorf("shutdown: %w", shutdownErr)
+	} else {
+		select {
+		case serverErr = <-serveErr:
+		case <-ctx.Done():
 		}
+	}
+
+	if serverErr != nil {
+		close(backupStop)
+		if !errors.Is(serverErr, http.ErrServerClosed) {
+			return fmt.Errorf("server: %w", serverErr)
+		}
+		return nil
+	}
+
+	log.Print("shutting down...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	shutdownErr := srv.Shutdown(shutdownCtx)
+	close(backupStop)
+	<-backupDone
+	// Final backup after the server has stopped taking requests, but
+	// before conn.Close() runs via the deferred call above.
+	runBackup(conn, cfg.BackupDir, cfg.BackupKeepDays)
+	if shutdownErr != nil {
+		return fmt.Errorf("shutdown: %w", shutdownErr)
+	}
+	if uiErr != nil {
+		return uiErr
 	}
 	return nil
 }
