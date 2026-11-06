@@ -65,15 +65,13 @@ Build the binaries for Windows and Linux:
 
 This produces `dist/ShopKeeper.exe` and `dist/shopkeeper-linux`.
 
-**Windows: a native window.** `ShopKeeper.exe` is a normal Windows
-program (title bar, taskbar icon, no browser, no console, no web server
-and no extra runtime to install). Everything it needs at run time is on
-the PC: it works with no internet.
-
-> **Work in progress:** the native window has the Products and Sell
-> screens so far. For the other pages (Dashboard, Sales, Stock log,
-> Billiard) run it with `SHOPKEEPER_UI=web`, which shows the web pages in
-> your browser as before.
+**Windows: its own window.** `ShopKeeper.exe` shows the app in a native
+window (title bar, taskbar icon, no address bar, no tabs, no console).
+It uses Microsoft's *Edge WebView2 Runtime* to draw the page, which
+Windows 11 and an updated Windows 10 already have; on a PC without it
+the app says so and shows where to get it (free, needs internet once).
+Everything the app needs at run time is on the PC: it works with no
+internet.
 
 - **Closing the window stops the app** (it takes one last backup
   first). Start it again from the shortcut.
@@ -83,8 +81,6 @@ the PC: it works with no internet.
   database (the previous one is kept as `shop.log.old` once it passes
   2 MB). A start-up error (for example, the port is taken) is shown in a
   message box.
-- **`SHOPKEEPER_UI=web`** serves the web pages on `localhost` and opens
-  your browser instead of the native window (the same as on Linux).
 - **`NO_BROWSER=1`** runs the server with no window at all (scripted
   or headless use).
 
@@ -101,7 +97,9 @@ powershell -File installer\build-installer.ps1
 It installs to `C:\ShopKeeper` (its data lives next to the program, so
 not Program Files), adds a Start menu entry and an optional desktop
 shortcut, and offers to start the app. Uninstalling removes only the
-program: `shop.db`, `backups\` and `shop.log` stay.
+program: `shop.db`, `backups\` and `shop.log` stay. To make the setup
+also work on a PC without WebView2 and without internet, see the top of
+`installer/ShopKeeper.iss`.
 
 **Without the installer:** put the exe in its own folder (e.g.
 `C:\ShopKeeper`) — `shop.db` and `backups/` appear right beside it the

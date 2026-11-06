@@ -5,10 +5,9 @@
 #   cmd/server/icon_windows.ico          copy embedded in the exe (go:embed)
 #   web/static/icon.svg, favicon.ico     browser tab
 #
-#   cmd/server/rsrc_windows_amd64.syso   the exe's own icon and manifest (go build links it)
+#   cmd/server/rsrc_windows_amd64.syso   the exe's own icon in Explorer (go build links it)
 #
-# The .syso is made by tools/mksyso (standard library only) from cmd/server/app.manifest and
-# assets/icon.ico.
+# The .syso is made by tools/mksyso (standard library only) from assets/icon.ico.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,5 +31,5 @@ PY
 cp assets/icon.svg web/static/icon.svg
 cp assets/icon.ico cmd/server/icon_windows.ico
 
-go run ./tools/mksyso -manifest cmd/server/app.manifest -ico assets/icon.ico -o cmd/server/rsrc_windows_amd64.syso
+go run ./tools/mksyso -ico assets/icon.ico -o cmd/server/rsrc_windows_amd64.syso
 echo "icons written"

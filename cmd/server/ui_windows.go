@@ -6,30 +6,26 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"unsafe"
 
+	"github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
-
-	"shop/internal/client"
-	"shop/internal/update"
-	"shop/internal/winui"
 )
 
-// windowedUI is true where the app shows its own native window instead of opening the user's
-// browser.
+// windowedUI is true where the app shows its own window instead of
+// opening the user's browser.
 const windowedUI = true
 
-// windowTitle is also how a second launch finds the first one's window (winui uses it as the
-// main window's title).
+// windowTitle is also how a second launch finds the first one's window.
 const windowTitle = "ShopKeeper"
+
+// webView2Download is Microsoft's page for the runtime the window needs.
+const webView2Download = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 
 var (
 	user32               = windows.NewLazySystemDLL("user32.dll")
@@ -55,6 +51,40 @@ func init() {
 	// Without this Windows scales the whole window as a bitmap on displays set
 	// to more than 100%, and the text is blurry.
 	_, _, _ = procSetProcessDPIAwr.Call()
+}
+
+// showWindow opens the app in a native window on url and blocks until the
+// window is closed, or quit is closed (the server died, or the process was
+// told to stop). It must be called from the main goroutine.
+func showWindow(url string, quit <-chan struct{}) error {
+	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		AutoFocus: true,
+		DataPath:  webViewDataDir(),
+		WindowOptions: webview2.WindowOptions{
+			Title:  windowTitle,
+			Width:  1280,
+			Height: 800,
+			Center: true,
+		},
+	})
+	if w == nil {
+		return errors.New("the window could not be created: Microsoft Edge WebView2 Runtime is not installed.\n\n" +
+			"Install it (free, about 2 MB, needs internet once) from:\n" + webView2Download)
+	}
+	defer w.Destroy()
+	setWindowIcon(uintptr(w.Window()))
+	w.SetSize(900, 600, webview2.HintMin)
+	w.Navigate(url)
+
+	go func() {
+		<-quit
+		// Not Terminate(): that posts the quit message to the calling
+		// thread, which is not the one running the loop. Destroy posts
+		// WM_CLOSE to the window, and the loop ends from there.
+		w.Destroy()
+	}()
+	w.Run()
+	return nil
 }
 
 // setWindowIcon gives the window its title-bar and taskbar icons, picking from the embedded .ico
@@ -84,6 +114,17 @@ func setWindowIcon(hwnd uintptr) {
 			_, _, _ = procSendMessageW.Call(hwnd, wmSetIcon, ic.which, h)
 		}
 	}
+}
+
+// webViewDataDir is where WebView2 keeps its cache. Under the user's profile
+// rather than next to the exe, which may sit in a folder only an
+// administrator can write to.
+func webViewDataDir() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "" // WebView2 picks its own default
+	}
+	return filepath.Join(base, "ShopKeeper", "webview")
 }
 
 // focusExisting brings the window of an already running ShopKeeper to the
@@ -125,36 +166,4 @@ func setupLogging(dir string) {
 		return
 	}
 	log.SetOutput(f)
-}
-
-// runNativeUI shows the native window on the API handler (no web server, no browser) and blocks
-// until the window is closed or quit is closed. It must run on the main goroutine.
-func runNativeUI(api http.Handler, port int, quit <-chan struct{}) error {
-	return winui.Run(winui.Options{
-		Client:  client.New(api, fmt.Sprintf("localhost:%d", port)),
-		Updater: updater,
-		Version: update.Version,
-		Quit:    quit,
-		SetIcon: setWindowIcon,
-	})
-}
-
-// acquireSingleInstance reports whether this is the only ShopKeeper using the database at key.
-// The lock lives as long as the process does.
-func acquireSingleInstance(key string) bool {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(strings.ToLower(key)))
-	name, err := windows.UTF16PtrFromString(fmt.Sprintf("Local\\ShopKeeper-%x", h.Sum64()))
-	if err != nil {
-		return true
-	}
-	handle, err := windows.CreateMutex(nil, false, name)
-	if errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-		if handle != 0 {
-			_ = windows.CloseHandle(handle)
-		}
-		return false
-	}
-	// Any other failure: carry on rather than refuse to start.
-	return true
 }
