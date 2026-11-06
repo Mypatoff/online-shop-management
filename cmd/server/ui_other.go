@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 )
@@ -14,9 +15,11 @@ import (
 // window is Windows-only.
 const windowedUI = false
 
-func showWindow(string, <-chan struct{}) error {
+func runNativeUI(http.Handler, int, <-chan struct{}) error {
 	return errors.New("no native window on this platform")
 }
+
+func acquireSingleInstance(string) bool { return true }
 
 func focusExisting() bool { return false }
 

@@ -1,12 +1,7 @@
 ; ShopKeeper setup. Build it with installer\build-installer.ps1, or by hand with
 ;   ISCC.exe /DAppVersion=1.0.0 installer\ShopKeeper.iss
 ; after building dist\ShopKeeper.exe (build.bat / build.sh). Nothing else has to be installed on the
-; shop PC except Microsoft's Edge WebView2 Runtime, which Windows 11 and an updated Windows 10 have.
-;
-; To make the setup work on a PC with no internet and no WebView2 either, put Microsoft's
-; "MicrosoftEdgeWebview2Setup.exe" (the Evergreen bootstrapper, needs internet) or the standalone
-; installer renamed to that name in this folder before compiling: it is then bundled and run only
-; when the runtime is missing.
+; shop PC: the program draws its own window (no browser engine needed).
 
 #define AppName "ShopKeeper"
 #ifndef AppVersion
@@ -29,7 +24,8 @@ DisableProgramGroupPage=yes
 OutputDir=..\dist
 OutputBaseFilename=ShopKeeper-Setup
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={app}\ShopKeeper.exe
+SetupIconFile=..\assets\icon.ico
+UninstallDisplayIcon={app}\ShopKeeper.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -50,37 +46,18 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\dist\ShopKeeper.exe"; DestDir: "{app}"; Flags: ignoreversion
-#ifexist "MicrosoftEdgeWebview2Setup.exe"
-Source: "MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: not WebView2Installed
-#endif
+Source: "..\assets\icon.ico"; DestDir: "{app}"; DestName: "ShopKeeper.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\ShopKeeper.exe"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\ShopKeeper.exe"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\ShopKeeper.exe"; IconFilename: "{app}\ShopKeeper.ico"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\ShopKeeper.exe"; IconFilename: "{app}\ShopKeeper.ico"; Tasks: desktopicon
 
 [Run]
-#ifexist "MicrosoftEdgeWebview2Setup.exe"
-Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime..."; Check: not WebView2Installed; Flags: waituntilterminated
-#endif
 Filename: "{app}\ShopKeeper.exe"; Description: "Start {#AppName} now"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+; Left beside the program by the in-app updater.
+Type: files; Name: "{app}\ShopKeeper.exe.old"
+Type: files; Name: "{app}\ShopKeeper.exe.new"
+
 ; The uninstaller removes only what this setup installed: shop.db, backups\ and shop.log stay.
-
-[Code]
-// Microsoft Edge WebView2 Runtime registers its version under this client id, machine-wide or per user.
-function WebView2Installed: Boolean;
-var
-  Version: String;
-begin
-  Result :=
-    (RegQueryStringValue(HKLM32, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and (Version <> '') and (Version <> '0.0.0.0')) or
-    (RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and (Version <> '') and (Version <> '0.0.0.0')) or
-    (RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and (Version <> '') and (Version <> '0.0.0.0'));
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if (CurStep = ssPostInstall) and (not WebView2Installed) then
-    MsgBox('ShopKeeper needs "Microsoft Edge WebView2 Runtime" to show its window, and this PC does not have it yet.' + #13#10 + #13#10 +
-           'Download and install it once (free): https://go.microsoft.com/fwlink/p/?LinkId=2124703', mbInformation, MB_OK);
-end;

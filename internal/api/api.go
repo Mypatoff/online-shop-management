@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"shop/internal/store"
+	"shop/internal/update"
 )
 
 // API holds everything the HTTP handlers need.
@@ -14,10 +15,17 @@ type API struct {
 	shopName string
 	currency string
 	decimals int
+	updater  *update.Updater // nil: the update routes are not served
 }
 
 func New(s *store.Store, shopName, currency string, decimals int) *API {
 	return &API{store: s, shopName: shopName, currency: currency, decimals: decimals}
+}
+
+// WithUpdater turns on the version and update routes.
+func (a *API) WithUpdater(u *update.Updater) *API {
+	a.updater = u
+	return a
 }
 
 // Routes builds the full handler: the routing table wrapped in the
@@ -46,6 +54,13 @@ func (a *API) Routes(port int) http.Handler {
 	mux.HandleFunc("GET /api/billiard", a.handleListBilliard)
 	mux.HandleFunc("POST /api/billiard", a.handleCreateBilliardEntry)
 	mux.HandleFunc("POST /api/billiard/{id}/void", a.handleVoidBilliardEntry)
+
+	if a.updater != nil {
+		mux.HandleFunc("GET /api/version", a.handleVersion)
+		mux.HandleFunc("GET /api/update/check", a.handleUpdateCheck)
+		mux.HandleFunc("GET /api/update/status", a.handleUpdateStatus)
+		mux.HandleFunc("POST /api/update/apply", a.handleUpdateApply)
+	}
 
 	return protect(allowedHosts(port))(requireJSON(mux))
 }

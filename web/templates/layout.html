@@ -5,12 +5,17 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>ShopKeeper</title>
+	<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+	<link rel="icon" type="image/x-icon" href="/static/favicon.ico" sizes="any">
 	<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 	<header class="topbar no-print">
 		<div class="topbar-inner">
-			<span class="brand">ShopKeeper</span>
+			<span class="brand">
+				<img class="brand-icon" src="/static/icon.svg" alt="" width="26" height="26">ShopKeeper
+				<span class="version" id="app-version" title="Installed version"></span>
+			</span>
 			<nav>
 				<a href="/" class="{{if eq .Active "dashboard"}}active{{end}}">Dashboard</a>
 				<a href="/products" class="{{if eq .Active "products"}}active{{end}}">Products</a>
@@ -19,6 +24,7 @@
 				<a href="/stock-log" class="{{if eq .Active "stock-log"}}active{{end}}">Stock log</a>
 				<a href="/billiard" class="{{if eq .Active "billiard"}}active{{end}}">Billiard</a>
 				<a href="/api/backup" class="backup-link" download>Download backup</a>
+				<button type="button" id="update-btn" class="btn btn-small update-btn" title="Check GitHub for a newer version">Update</button>
 			</nav>
 		</div>
 	</header>
@@ -39,7 +45,19 @@
 		</form>
 	</dialog>
 
+	<dialog id="update-dialog" class="modal no-print" aria-labelledby="update-title">
+		<div class="modal-form">
+			<h2 id="update-title">Update ShopKeeper</h2>
+			<div id="update-body" class="update-body" aria-live="polite"></div>
+			<div class="modal-actions">
+				<button type="button" id="update-close" class="btn btn-ghost">Close</button>
+				<button type="button" id="update-go" class="btn btn-primary" hidden>Update now</button>
+			</div>
+		</div>
+	</dialog>
+
 	<script src="/static/app.js"></script>
+	<script src="/static/update.js"></script>
 	{{if .PageScript}}<script src="/static/{{.PageScript}}"></script>{{end}}
 </body>
 </html>

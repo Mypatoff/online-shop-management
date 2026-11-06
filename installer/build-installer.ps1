@@ -27,6 +27,7 @@ if (-not $InnoCompiler -or -not (Test-Path $InnoCompiler)) {
     throw "Inno Setup 6 not found. Install it from https://jrsoftware.org/isdl.php or pass -InnoCompiler <path to ISCC.exe>."
 }
 
+$env:VERSION = $Version   # build.bat embeds it, so the app knows its own version
 & cmd /c build.bat
 if ($LASTEXITCODE -ne 0) { throw "build.bat failed" }
 

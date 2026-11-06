@@ -52,6 +52,17 @@ jobs:
         shell: pwsh
         run: ./installer/build-installer.ps1 -Version ${{ steps.version.outputs.version }}
 
+      # The app's "Update" button downloads ShopKeeper.exe (or shopkeeper-linux) and refuses it unless
+      # it matches this list, so a damaged or swapped download is never installed.
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $lines = foreach ($f in "ShopKeeper-Setup.exe", "ShopKeeper.exe", "shopkeeper-linux") {
+            "{0}  {1}" -f (Get-FileHash "dist/$f" -Algorithm SHA256).Hash.ToLower(), $f
+          }
+          [IO.File]::WriteAllText("$PWD/dist/SHA256SUMS.txt", ($lines -join "`n") + "`n")
+          Get-Content dist/SHA256SUMS.txt
+
       - name: Files
         shell: pwsh
         run: Get-ChildItem dist | Select-Object Name, Length
@@ -61,12 +72,17 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "${{ github.ref_name }}"
-          dist/ShopKeeper-Setup.exe dist/ShopKeeper.exe dist/shopkeeper-linux
-          --title "ShopKeeper ${{ github.ref_name }}"
-          --generate-notes
-          --verify-tag
+        run: |
+          # A tag like v1.2.0-beta.1 is a pre-release: it is not "latest", so the app's Update
+          # button never offers it.
+          $flags = @()
+          if ("${{ github.ref_name }}" -match '-') { $flags += "--prerelease" }
+          gh release create "${{ github.ref_name }}" `
+            dist/ShopKeeper-Setup.exe dist/ShopKeeper.exe dist/shopkeeper-linux dist/SHA256SUMS.txt `
+            --title "ShopKeeper ${{ github.ref_name }}" `
+            --generate-notes `
+            --verify-tag `
+            @flags
 
       - name: Keep the files (manual run)
         if: github.ref_type != 'tag'
@@ -76,3 +92,4 @@ jobs:
           path: |
             dist/ShopKeeper-Setup.exe
             dist/ShopKeeper.exe
+            dist/SHA256SUMS.txt

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2c3d"/>
+      <stop offset="1" stop-color="#0b0f14"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)" stroke="#2f3f54" stroke-width="3"/>
+  <!-- shop body -->
+  <rect x="58" y="104" width="140" height="102" rx="6" fill="#18202b" stroke="#2f3f54" stroke-width="3"/>
+  <!-- window -->
+  <rect x="74" y="126" width="58" height="44" rx="5" fill="#4ade80"/>
+  <path d="M74 150 L132 150" stroke="#18202b" stroke-width="3"/>
+  <path d="M103 126 L103 170" stroke="#18202b" stroke-width="3"/>
+  <!-- door -->
+  <rect x="148" y="126" width="34" height="80" rx="4" fill="#60a5fa"/>
+  <circle cx="173" cy="168" r="3" fill="#0b0f14"/>
+  <!-- awning -->
+  <path d="M66.0 58 L90.8 58 L77.6 106 A16.8 16.8 0 0 1 44.0 106 Z" fill="#60a5fa"/>
+  <path d="M90.8 58 L115.6 58 L111.2 106 A16.8 16.8 0 0 1 77.6 106 Z" fill="#e6edf3"/>
+  <path d="M115.6 58 L140.4 58 L144.8 106 A16.8 16.8 0 0 1 111.2 106 Z" fill="#60a5fa"/>
+  <path d="M140.4 58 L165.2 58 L178.4 106 A16.8 16.8 0 0 1 144.8 106 Z" fill="#e6edf3"/>
+  <path d="M165.2 58 L190.0 58 L212.0 106 A16.8 16.8 0 0 1 178.4 106 Z" fill="#60a5fa"/>
+  <!-- ground -->
+  <rect x="44" y="204" width="168" height="8" rx="4" fill="#e6edf3"/>
+</svg>
