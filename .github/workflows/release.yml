@@ -1,0 +1,78 @@
+# Builds the Windows installer when a version tag is pushed, and attaches it to the
+# GitHub release for that tag (the "Releases" / tags page).
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# A manual run (Actions -> Release -> Run workflow) builds the same files and keeps
+# them as a downloadable artifact of the run, without creating a release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # to create the release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: |
+          go vet ./...
+          go test ./...
+
+      # Inno Setup 6 is on GitHub's Windows images; this only installs it if that changes.
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup 6 is not installed" }
+
+      # v1.2.3 -> 1.2.3. The installer's version must be numeric, so a tag like v1.2.3-rc1
+      # is built as 1.2.3.
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}"
+          if ($ref -match '^v?(\d+\.\d+\.\d+)') { $v = $Matches[1] } else { $v = "0.0.0" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build ShopKeeper.exe and ShopKeeper-Setup.exe
+        shell: pwsh
+        run: ./installer/build-installer.ps1 -Version ${{ steps.version.outputs.version }}
+
+      - name: Files
+        shell: pwsh
+        run: Get-ChildItem dist | Select-Object Name, Length
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          dist/ShopKeeper-Setup.exe dist/ShopKeeper.exe dist/shopkeeper-linux
+          --title "ShopKeeper ${{ github.ref_name }}"
+          --generate-notes
+          --verify-tag
+
+      - name: Keep the files (manual run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShopKeeper-windows
+          path: |
+            dist/ShopKeeper-Setup.exe
+            dist/ShopKeeper.exe
