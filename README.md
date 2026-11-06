@@ -161,6 +161,12 @@ still works without internet.
   version: `VERSION=1.2.0 ./build.sh` (`set VERSION=1.2.0` before `build.bat`).
   Pushing a `v*` tag does this in the release workflow and publishes the files
   the updater needs.
+- Versions follow [semantic versioning](https://semver.org): `v1.2.1` for fixes,
+  `v1.3.0` for a new feature, `v2.0.0` for a breaking change. A tag with a suffix
+  (`v1.3.0-beta.1`) is a pre-release: it is never offered to other users, the app
+  built from it reports the full `1.3.0-beta.1`, and it is correctly older than
+  `1.3.0`, so a beta tester is offered the final release. (The installer itself
+  shows the numeric `1.3.0`.)
 
 ## Continuous integration
 

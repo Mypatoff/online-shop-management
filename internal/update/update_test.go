@@ -27,6 +27,19 @@ func TestParseVersionAndCompare(t *testing.T) {
 		{"", "1.0.0", 2},
 		{"1.2.3.4", "1.0.0", 2},
 		{"1.x.0", "1.0.0", 2},
+		{"1.0.0-", "1.0.0", 2},
+		{"1.0.0-a..b", "1.0.0", 2},
+		// Pre-releases: older than their own release, newer than the previous one.
+		{"1.3.0", "1.3.0-beta.1", 1},
+		{"1.3.0-beta.1", "1.3.0", -1},
+		{"1.3.0-beta.1", "1.2.9", 1},
+		{"1.3.0-beta.2", "1.3.0-beta.1", 1},
+		{"1.3.0-beta.10", "1.3.0-beta.2", 1}, // numbers as numbers, not text
+		{"1.3.0-rc.1", "1.3.0-beta.9", 1},
+		{"1.3.0-beta", "1.3.0-beta.1", -1}, // fewer identifiers is older
+		{"1.3.0-beta.1", "1.3.0-beta.1", 0},
+		{"1.3.0-1", "1.3.0-beta", -1}, // a number is older than a word
+		{"v1.3.0-beta.1+build5", "1.3.0-beta.1", 0},
 	}
 	for _, tt := range tests {
 		a, ok := parseVersion(tt.a)
@@ -123,6 +136,28 @@ func TestCheck(t *testing.T) {
 		}
 		if info.Available || info.CanApply {
 			t.Fatalf("info = %+v, want up to date", info)
+		}
+	})
+	t.Run("a beta install is offered the final release", func(t *testing.T) {
+		// The bug this guards against: 1.3.0-beta.1 used to be read as 1.3.0, equal to the
+		// release, so beta testers were never offered it.
+		f := newFake(t, "1.3.0-beta.1", "v1.3.0", []byte("\x7fELFnew"))
+		info, err := f.updater.Check(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.Available || !info.CanApply {
+			t.Fatalf("info = %+v, want the final release offered", info)
+		}
+	})
+	t.Run("a newer beta is not downgraded to the older release", func(t *testing.T) {
+		f := newFake(t, "1.4.0-beta.1", "v1.3.0", nil)
+		info, err := f.updater.Check(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Available || info.CanApply {
+			t.Fatalf("info = %+v, want no update", info)
 		}
 	})
 	t.Run("dev build never applies", func(t *testing.T) {

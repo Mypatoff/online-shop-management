@@ -38,8 +38,10 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
           if (-not (Test-Path $iscc)) { throw "Inno Setup 6 is not installed" }
 
-      # v1.2.3 -> 1.2.3. The installer's version must be numeric, so a tag like v1.2.3-rc1
-      # is built as 1.2.3.
+      # Two versions come from the tag. The installer's must be numeric, so v1.3.0-beta.1 is
+      # 1.3.0 there. The app's keeps everything after the v (1.3.0-beta.1): it is what the Update
+      # button compares with the latest release, and cutting the suffix off would make a beta
+      # call itself 1.3.0, so it would never be offered the real 1.3.0.
       - name: Version
         id: version
         shell: pwsh
@@ -47,10 +49,11 @@ jobs:
           $ref = "${{ github.ref_name }}"
           if ($ref -match '^v?(\d+\.\d+\.\d+)') { $v = $Matches[1] } else { $v = "0.0.0" }
           "version=$v" >> $env:GITHUB_OUTPUT
+          "app=$($ref -replace '^v', '')" >> $env:GITHUB_OUTPUT
 
       - name: Build ShopKeeper.exe and ShopKeeper-Setup.exe
         shell: pwsh
-        run: ./installer/build-installer.ps1 -Version ${{ steps.version.outputs.version }}
+        run: ./installer/build-installer.ps1 -Version ${{ steps.version.outputs.version }} -AppVersion ${{ steps.version.outputs.app }}
 
       # The app's "Update" button downloads ShopKeeper.exe (or shopkeeper-linux) and refuses it unless
       # it matches this list, so a damaged or swapped download is never installed.

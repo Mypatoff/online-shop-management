@@ -471,13 +471,33 @@ func findChecksum(sums, name string) (string, bool) {
 	return "", false
 }
 
-// parseVersion reads "v1.2.3", "1.2" or "1.2.3-rc1" as numbers; anything else ("dev") is
-// not a version.
-func parseVersion(s string) ([3]int, bool) {
-	var v [3]int
+// version is a parsed release version: the three numbers and, after a "-", the pre-release
+// identifiers (1.3.0-beta.1 has pre ["beta", "1"]).
+type version struct {
+	num [3]int
+	pre []string
+}
+
+// parseVersion reads "v1.2.3", "1.2" or "1.3.0-beta.1" (build metadata after a "+" is ignored);
+// anything else ("dev") is not a version.
+func parseVersion(s string) (version, bool) {
+	var v version
 	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
-	if i := strings.IndexAny(s, "-+"); i >= 0 {
+	if i := strings.IndexByte(s, '+'); i >= 0 {
 		s = s[:i]
+	}
+	if i := strings.IndexByte(s, '-'); i >= 0 {
+		pre := s[i+1:]
+		s = s[:i]
+		if pre == "" {
+			return v, false
+		}
+		v.pre = strings.Split(pre, ".")
+		for _, id := range v.pre {
+			if id == "" {
+				return v, false
+			}
+		}
 	}
 	parts := strings.Split(s, ".")
 	if s == "" || len(parts) > 3 {
@@ -488,19 +508,63 @@ func parseVersion(s string) ([3]int, bool) {
 		if err != nil || n < 0 {
 			return v, false
 		}
-		v[i] = n
+		v.num[i] = n
 	}
 	return v, true
 }
 
-func compare(a, b [3]int) int {
-	for i := range a {
-		if a[i] != b[i] {
-			if a[i] > b[i] {
+// compare returns 1, 0 or -1 as a is newer than, the same as, or older than b, following
+// semantic versioning: a pre-release is older than the release it leads up to (1.3.0-beta.1 <
+// 1.3.0), and pre-release identifiers compare one by one, numbers as numbers (beta.2 < beta.10).
+func compare(a, b version) int {
+	for i := range a.num {
+		if a.num[i] != b.num[i] {
+			if a.num[i] > b.num[i] {
 				return 1
 			}
 			return -1
 		}
 	}
+	switch {
+	case len(a.pre) == 0 && len(b.pre) == 0:
+		return 0
+	case len(a.pre) == 0:
+		return 1 // a is the release, b only a pre-release of it
+	case len(b.pre) == 0:
+		return -1
+	}
+	for i := 0; i < len(a.pre) && i < len(b.pre); i++ {
+		if c := comparePreID(a.pre[i], b.pre[i]); c != 0 {
+			return c
+		}
+	}
+	switch { // all shared identifiers equal: the shorter list is older
+	case len(a.pre) > len(b.pre):
+		return 1
+	case len(a.pre) < len(b.pre):
+		return -1
+	}
 	return 0
+}
+
+// comparePreID orders two pre-release identifiers: numbers as numbers, and a number is older
+// than a word.
+func comparePreID(a, b string) int {
+	an, aerr := strconv.Atoi(a)
+	bn, berr := strconv.Atoi(b)
+	switch {
+	case aerr == nil && berr == nil:
+		if an != bn {
+			if an > bn {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	case aerr == nil:
+		return -1
+	case berr == nil:
+		return 1
+	}
+	return strings.Compare(a, b)
 }

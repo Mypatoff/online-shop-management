@@ -5,9 +5,16 @@
     Usage:
       powershell -File installer\build-installer.ps1
       powershell -File installer\build-installer.ps1 -Version 1.2.0
+      powershell -File installer\build-installer.ps1 -Version 1.3.0 -AppVersion 1.3.0-beta.1
+
+    -Version is the number the installer shows; Inno Setup needs it numeric (1.3.0). -AppVersion is
+    the version built into the app, which the Update button compares against GitHub: it defaults to
+    -Version, but for a pre-release it must keep the suffix (1.3.0-beta.1), or the app would call
+    itself 1.3.0 and never be offered the real 1.3.0.
 #>
 param(
     [string]$Version = "1.0.0",
+    [string]$AppVersion = "",
     [string]$InnoCompiler = ""
 )
 
@@ -27,7 +34,8 @@ if (-not $InnoCompiler -or -not (Test-Path $InnoCompiler)) {
     throw "Inno Setup 6 not found. Install it from https://jrsoftware.org/isdl.php or pass -InnoCompiler <path to ISCC.exe>."
 }
 
-$env:VERSION = $Version   # build.bat embeds it, so the app knows its own version
+if (-not $AppVersion) { $AppVersion = $Version }
+$env:VERSION = $AppVersion   # build.bat embeds it, so the app knows its own version
 & cmd /c build.bat
 if ($LASTEXITCODE -ne 0) { throw "build.bat failed" }
 
