@@ -93,7 +93,7 @@ sellBtn.onclick = function () {
 };
 
 function loadProducts() {
-	return apiFetch("/api/products?archived=0").then(function (products) {
+	return apiFetch("/api/products?archived=0&sort=popular").then(function (products) {
 		allProducts = products;
 		renderResults(searchInput.value.trim());
 	});

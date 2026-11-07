@@ -73,6 +73,16 @@ func (s *Store) GetProduct(id int64) (Product, error) {
 // name/SKU, optionally filtered by archived status. A nil archived
 // filter returns both archived and active products.
 func (s *Store) ListProducts(q string, archived *bool) ([]Product, error) {
+	return s.listProducts(q, archived, false)
+}
+
+// ListProductsByPopularity is ListProducts ordered by units sold (voided sales don't
+// count), best sellers first. Ties, and products never sold, fall back to name order.
+func (s *Store) ListProductsByPopularity(q string, archived *bool) ([]Product, error) {
+	return s.listProducts(q, archived, true)
+}
+
+func (s *Store) listProducts(q string, archived *bool, byPopularity bool) ([]Product, error) {
 	query := `SELECT ` + productColumns + ` FROM products WHERE 1=1`
 	var args []any
 
@@ -85,7 +95,12 @@ func (s *Store) ListProducts(q string, archived *bool) ([]Product, error) {
 		query += ` AND archived = ?`
 		args = append(args, boolToInt(*archived))
 	}
-	query += ` ORDER BY name`
+	if byPopularity {
+		query += ` ORDER BY (SELECT COALESCE(SUM(quantity), 0) FROM sales
+			WHERE sales.product_id = products.id AND sales.voided_at IS NULL) DESC, name`
+	} else {
+		query += ` ORDER BY name`
+	}
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {

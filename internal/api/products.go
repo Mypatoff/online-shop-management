@@ -42,7 +42,17 @@ func (a *API) handleListProducts(w http.ResponseWriter, r *http.Request) {
 		archived = &b
 	}
 
-	products, err := a.store.ListProducts(q, archived)
+	var products []store.Product
+	var err error
+	switch r.URL.Query().Get("sort") {
+	case "", "name":
+		products, err = a.store.ListProducts(q, archived)
+	case "popular":
+		products, err = a.store.ListProductsByPopularity(q, archived)
+	default:
+		writeError(w, http.StatusBadRequest, "sort must be name or popular")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not list products")
 		return
