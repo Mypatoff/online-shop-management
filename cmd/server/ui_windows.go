@@ -35,6 +35,9 @@ var (
 	procSendMessageW     = user32.NewProc("SendMessageW")
 	procCreateIconFromRE = user32.NewProc("CreateIconFromResourceEx")
 	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
+
+	dwmapi                = windows.NewLazySystemDLL("dwmapi.dll")
+	procDwmSetWindowAttrW = dwmapi.NewProc("DwmSetWindowAttribute")
 )
 
 // appIcon is the program's icon (assets/icon.svg, built by assets/build-icons.sh), several sizes
@@ -72,6 +75,7 @@ func showWindow(url string, quit <-chan struct{}) error {
 	}
 	defer w.Destroy()
 	setWindowIcon(uintptr(w.Window()))
+	darkTitleBar(uintptr(w.Window()))
 	w.SetSize(900, 600, webview2.HintMin)
 	w.Navigate(url)
 
@@ -113,6 +117,23 @@ func setWindowIcon(hwnd uintptr) {
 			_, _, _ = procSendMessageW.Call(hwnd, wmSetIcon, ic.which, h)
 		}
 	}
+}
+
+// darkTitleBar makes the title bar match the page, which is always dark (--bg in style.css);
+// otherwise Windows draws a white bar above it. Best effort: older Windows versions ignore
+// the attributes and keep the normal bar.
+func darkTitleBar(hwnd uintptr) {
+	const (
+		dwmwaUseImmersiveDarkMode = 20 // Windows 10 20H1 and later: dark title bar
+		dwmwaCaptionColor         = 35 // Windows 11: exact title bar colour
+		dwmwaTextColor            = 36 // Windows 11: title text colour
+	)
+	set := func(attr uintptr, v uint32) {
+		_, _, _ = procDwmSetWindowAttrW.Call(hwnd, attr, uintptr(unsafe.Pointer(&v)), unsafe.Sizeof(v))
+	}
+	set(dwmwaUseImmersiveDarkMode, 1)
+	set(dwmwaCaptionColor, 0x140F0B) // #0b0f14 as 0x00BBGGRR
+	set(dwmwaTextColor, 0xF3EDE6)    // #e6edf3
 }
 
 // webViewDataDir is where WebView2 keeps its cache. Under the user's profile
